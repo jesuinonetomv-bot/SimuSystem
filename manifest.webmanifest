@@ -1,0 +1,9 @@
+{
+  "name": "SimuSystem — Simulador de Manobras",
+  "short_name": "SimuSystem",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#d9d9d9",
+  "theme_color": "#26333d",
+  "description": "Simulador vetorial de manobras do sistema elétrico."
+}
