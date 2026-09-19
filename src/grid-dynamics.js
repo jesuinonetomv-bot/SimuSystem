@@ -2,7 +2,7 @@ const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 export class GridDynamics{
   constructor(){this.states=new Map()}
   reset(){this.states.clear()}
-  step({key,mode="rigid",nominalHz=60,demandMW=0,demandMvar=0,setpointMW=0,ratedMVA=100,maxImportMW=100,maxExportMW=100,maxReactiveMvar=100,minReactiveMvar=-100,inertiaSeconds=6,droopPercent=5,dampingMWPerHz=2,voltageSetpointPU=1,shortCircuitMVA=1000,dtSeconds=1}){
+  step({key,mode="rigid",nominalHz=60,demandMW=0,demandMvar=0,setpointMW=0,setpointMvar=0,ratedMVA=100,maxImportMW=100,maxExportMW=100,maxReactiveMvar=100,minReactiveMvar=-100,inertiaSeconds=6,droopPercent=5,dampingMWPerHz=2,voltageSetpointPU=1,shortCircuitMVA=1000,dtSeconds=1}){
     const f0=Number(nominalHz)||60;
     const pMin=-Math.abs(Number(maxExportMW)||0),pMax=Math.abs(Number(maxImportMW)||0);
     const qMin=Number(minReactiveMvar),qMax=Number(maxReactiveMvar);
@@ -20,7 +20,7 @@ export class GridDynamics{
     const mismatch=pCommand-demandMW-damping*(previous.frequencyHz-f0);
     const dfdt=f0*mismatch/(2*h*base);
     const frequencyHz=clamp(previous.frequencyHz+dfdt*Math.max(.05,Math.min(2,Number(dtSeconds)||1)),45,65);
-    const q=clamp(demandMvar,qMin,qMax),qError=q-demandMvar;
+    const q=clamp(Number(setpointMvar)||0,qMin,qMax),qError=q-demandMvar;
     const voltagePU=clamp((Number(voltageSetpointPU)||1)+qError/Math.max(1,Number(shortCircuitMVA)||1000)*.1,.75,1.25);
     this.states.set(key,{frequencyHz});
     return{frequencyHz,activeMW:pCommand,reactiveMvar:q,voltagePU,imbalanceMW:pCommand-demandMW};
