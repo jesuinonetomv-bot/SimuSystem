@@ -2539,6 +2539,48 @@
           secondary: nearestBreaker(t[1], id),
         };
       }
+      function transformerSecondaryHasSource(id, closingSwitchId = null) {
+        const transformer = diagram.items[id];
+        if (!transformer) return false;
+        const secondaryPoint = terminals(transformer)[1],
+          entries = Object.entries(diagram.items || {}).filter(
+            ([k, o]) =>
+              k !== id &&
+              isElectrical(o) &&
+              !(
+                (o.type === "breaker" || o.type === "disconnector") &&
+                o.state !== "closed" &&
+                k !== closingSwitchId
+              ),
+          ),
+          graph = new Map(entries.map(([k]) => [k, []]));
+        for (let i = 0; i < entries.length; i++)
+          for (let j = i + 1; j < entries.length; j++)
+            if (touching(entries[i][1], entries[j][1])) {
+              graph.get(entries[i][0]).push(entries[j][0]);
+              graph.get(entries[j][0]).push(entries[i][0]);
+            }
+        const queue = entries
+            .filter(([, o]) => touchesPoint(o, secondaryPoint))
+            .map(([k]) => k),
+          seen = new Set(queue);
+        while (queue.length) {
+          const k = queue.shift(),
+            o = diagram.items[k];
+          if (
+            o?.isSource === true &&
+            o.state !== "stopped" &&
+            (o.type !== "turbogenerator" || o.state !== "stopped")
+          )
+            return true;
+          for (const next of graph.get(k) || [])
+            if (!seen.has(next)) {
+              seen.add(next);
+              queue.push(next);
+            }
+        }
+        return false;
+      }
       function transformerSequenceViolation(breakerId, nextState) {
         for (const [k, o] of Object.entries(diagram.items || {})) {
           if (o.type !== "transformer") continue;
@@ -2553,6 +2595,8 @@
             return {
               k,
               o,
+              secondaryId: s.secondary,
+              reverseSource: transformerSecondaryHasSource(k),
               message:
                 "Sequência incorreta: abra primeiro o disjuntor do secundário e depois o disjuntor do primário.",
             };
@@ -2564,6 +2608,8 @@
             return {
               k,
               o,
+              secondaryId: s.secondary,
+              reverseSource: transformerSecondaryHasSource(k, s.secondary),
               message:
                 "Sequência incorreta: energize primeiro o primário e depois feche o disjuntor do secundário.",
             };
@@ -3072,6 +3118,46 @@
                 )
               : 0;
           }
+          function effectiveUtilityDispatch(k) {
+            const e = electricalData(diagram.items[k]),
+              d = utilityDispatch.get(k) || {
+                p: 0,
+                q: 0,
+                frequencyHz: frequency,
+                voltagePU: 0,
+              };
+            if (!Number.isFinite(+e.forcedCurrentA))
+              return { ...d, currentA: null };
+            const currentA = +e.forcedCurrentA,
+              voltage = Math.max(
+                0.1,
+                (+e.nominalKV || 230) * d.voltagePU,
+              ),
+              apparent =
+                (Math.abs(currentA) * Math.sqrt(3) * voltage) / 1000,
+              referenceS = Math.hypot(gridDemandP, gridDemandQ),
+              originalS = Math.hypot(d.p, d.q),
+              basePf =
+                referenceS > 1e-6
+                  ? Math.abs(gridDemandP) / referenceS
+                  : originalS
+                    ? Math.abs(d.p) / originalS
+                    : 1,
+              pSign = currentA < 0 ? -1 : gridDemandP < -0.0001 ? -1 : 1,
+              qSign =
+                Math.abs(gridDemandQ) > 1e-6
+                  ? gridDemandQ < 0
+                    ? -1
+                    : 1
+                  : d.q < 0
+                    ? -1
+                    : 1,
+              p = pSign * apparent * basePf,
+              q =
+                qSign *
+                Math.sqrt(Math.max(0, apparent * apparent - p * p));
+            return { ...d, p, q, currentA };
+          }
           const sourceCapacity = external.length
               ? Math.max(100, pLoad * 1.25, genCapacity)
               : Math.max(1, genCapacity),
@@ -3328,6 +3414,44 @@
                 });
               }
           }
+          // Quando o operador força a corrente da concessionária, esse valor
+          // representa o intercâmbio efetivo na fronteira da rede. Repassa o
+          // mesmo P/Q aos transformadores conectados, mantendo o sinal:
+          // positivo = importação e negativo = exportação. Sem isto, a
+          // concessionária podia indicar exportação enquanto os TFs ainda
+          // mostravam potência positiva entrando no sistema.
+          const forcedUtilityEntries = utilityEntries.filter((k) =>
+            Number.isFinite(+electricalData(diagram.items[k]).forcedCurrentA),
+          );
+          if (forcedUtilityEntries.length && tfSourceIds.length) {
+            const interchange = utilityEntries.reduce(
+                (total, k) => {
+                  const dispatch = effectiveUtilityDispatch(k);
+                  total.p += dispatch.p;
+                  total.q += dispatch.q;
+                  return total;
+                },
+                { p: 0, q: 0 },
+              ),
+              weights = tfSourceIds.map((k) => {
+                const e = electricalData(diagram.items[k]);
+                return Math.max(
+                  0.1,
+                  (+e.ratedMVA || 25) /
+                    Math.max(0.1, +e.impedancePercent || 10),
+                );
+              }),
+              totalWeight = weights.reduce((sum, value) => sum + value, 0);
+            tfSourceIds.forEach((k, index) => {
+              const ratio = weights[index] / totalWeight;
+              tfAllocation.set(k, {
+                p: interchange.p * ratio,
+                q: interchange.q * ratio,
+                parallelCount: tfSourceIds.length,
+                forcedInterchange: true,
+              });
+            });
+          }
           for (const k of ids)
             if (
               diagram.items[k].type === "turbogenerator" &&
@@ -3362,12 +3486,7 @@
               secondaryKV = 0,
               overfluxPercent = 0;
             if (o.type === "utility") {
-              const d = utilityDispatch.get(k) || {
-                  p: 0,
-                  q: 0,
-                  frequencyHz: frequency,
-                  voltagePU: pu,
-                },
+              const d = effectiveUtilityDispatch(k),
                 rated = Math.max(1, +e.gridRatedMVA || 100);
               p = d.p;
               q = d.q;
@@ -3376,30 +3495,8 @@
               frequency = d.frequencyHz;
               let apparent = Math.hypot(p, q),
                 voltage = Math.max(0.1, nominal * pu);
-              if (Number.isFinite(+e.forcedCurrentA)) {
-                current = +e.forcedCurrentA;
-                const forcedS =
-                    (Math.abs(current) * Math.sqrt(3) * voltage) / 1000,
-                  referenceS = Math.hypot(gridDemandP, gridDemandQ),
-                  basePf =
-                    referenceS > 1e-6
-                      ? Math.abs(gridDemandP) / referenceS
-                      : apparent
-                        ? Math.abs(p) / apparent
-                        : 1,
-                  pSign = current < 0 ? -1 : gridDemandP < -0.0001 ? -1 : 1,
-                  qSign =
-                    Math.abs(gridDemandQ) > 1e-6
-                      ? gridDemandQ < 0
-                        ? -1
-                        : 1
-                      : q < 0
-                        ? -1
-                        : 1;
-                p = pSign * forcedS * basePf;
-                q = qSign * Math.sqrt(Math.max(0, forcedS * forcedS - p * p));
-                apparent = forcedS;
-              } else
+              if (d.currentA !== null) current = d.currentA;
+              else
                 current =
                   ((p < -0.0001 ? -1 : 1) * apparent * 1e6) /
                   (Math.sqrt(3) * voltage * 1000);
@@ -6038,6 +6135,17 @@
               ? transformerSequenceViolation(equipmentId, nextState)
               : null;
         if (o) o.state = nextState;
+        let protectionTrip = false;
+        if (
+          sequenceViolation?.reverseSource &&
+          sequenceViolation.secondaryId &&
+          diagram.items[sequenceViolation.secondaryId]
+        ) {
+          diagram.items[sequenceViolation.secondaryId].state = "open";
+          protectionTrip = true;
+          sequenceViolation.message =
+            "Energização reversa do transformador detectada pelo lado secundário. A proteção atuou e abriu automaticamente o disjuntor secundário para isolar o equipamento.";
+        }
         pending = null;
         $("#cmd").close();
         draw(!(loadViolation || sequenceViolation));
@@ -6053,6 +6161,9 @@
             sequenceViolation.o,
             sequenceViolation.message,
           );
+        if (protectionTrip)
+          $("#status").textContent =
+            "PROTEÇÃO ATUADA — transformador isolado por energização reversa";
       };
       $("#cmdCancel").onclick = $("#cmdClose").onclick = () => {
         $("#cmd").close();
