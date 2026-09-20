@@ -1227,6 +1227,42 @@
       .control-danger { color: #fff; background: #b8342b; }
       .control-empty { padding: 18px 8px; color: #667780; text-align: center; }
       .control-note { padding: 9px 11px; background: #fff4cc; border-left: 4px solid #dca500; }
+      .diagram-switcher {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 210px;
+      }
+      .diagram-switcher select {
+        min-width: 150px;
+        max-width: 240px;
+        padding: 9px 30px 9px 10px;
+        border: 1px solid #647680;
+        border-radius: 7px;
+        color: #fff;
+        background: #ffffff14;
+        font-weight: 700;
+      }
+      .diagram-switcher select option { color: #17232b; background: #fff; }
+      .diagram-manager { width: min(840px, 94vw); max-height: 86vh; }
+      .diagram-manager-grid {
+        display: grid;
+        grid-template-columns: minmax(220px, .8fr) minmax(300px, 1.2fr);
+        gap: 18px;
+        margin-top: 16px;
+      }
+      .diagram-list { max-height: 52vh; overflow: auto; border-right: 1px solid #d2dadd; padding-right: 12px; }
+      .diagram-card {
+        width: 100%; margin-bottom: 8px; padding: 11px; text-align: left;
+        border: 1px solid #b8c4c9; border-radius: 7px; background: #fff;
+      }
+      .diagram-card.active { border: 2px solid var(--accent); background: #eef7f6; }
+      .diagram-card small { display: block; margin-top: 4px; color: #667780; }
+      .diagram-create label { display: block; margin-top: 9px; font-weight: 750; }
+      .diagram-create select, .diagram-create textarea {
+        width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #ccd3d7; border-radius: 7px;
+      }
+      .diagram-create textarea { min-height: 70px; resize: vertical; }
       @media (max-width: 720px) {
         .time-panel {
           left: 6px;
@@ -1244,6 +1280,10 @@
         .control-body { grid-template-columns: 1fr; }
         .control-list { max-height: 220px; border-right: 0; border-bottom: 1px solid #bac7cc; }
         .control-grid { grid-template-columns: 1fr; }
+        .diagram-switcher { min-width: 0; }
+        .diagram-switcher select { max-width: 135px; min-width: 100px; }
+        .diagram-manager-grid { grid-template-columns: 1fr; }
+        .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
     </style>
   </head>
@@ -1253,6 +1293,12 @@
         SimuSystem<small>Workspace de Engenharia e Operação</small>
       </div>
       <span class="mode" id="mode">Modo de visualização</span>
+      <div class="diagram-switcher">
+        <select id="diagramSelect" aria-label="Diagrama atual">
+          <option value="principal">Diagrama principal</option>
+        </select>
+        <button class="top" id="diagramManage" hidden>Diagramas</button>
+      </div>
       <div class="grow"></div>
       <span class="operator-id" id="operatorLabel" hidden></span
       ><span class="alarm-badge" id="alarmCount">Alarmes: 0</span
@@ -1260,7 +1306,7 @@
       ><button class="top" id="controlBtn" hidden>Control Building</button
       ><button class="top" id="resetAlarms" hidden>Zerar alarmes</button
       ><button class="top" id="save" hidden>Salvar rascunho</button
-      ><button class="top publish" id="publish" hidden>Publicar</button
+      ><button class="top publish" id="publish" hidden>Publicar esta aba</button
       ><button class="top publish" id="operatorLoginBtn">
         Entrar como operador</button
       ><button class="top" id="login">Entrar como administrador</button>
@@ -1519,6 +1565,43 @@
       ><button class="fit" id="opFit" title="Ajustar à tela">Ajustar</button
       ><button id="opZoomIn" title="Aumentar zoom">+</button>
     </div>
+    <dialog id="diagramBox" class="diagram-manager">
+      <div class="history-head">
+        <div>
+          <h2>Diagramas do simulador</h2>
+          <div class="hint">Crie sistemas independentes sem alterar o diagrama atual.</div>
+        </div>
+        <div class="grow"></div>
+        <button class="top" id="diagramClose" style="color:#24323d;background:#eef2f4">Fechar</button>
+      </div>
+      <div class="diagram-manager-grid">
+        <div>
+          <h3>Diagramas existentes</h3>
+          <div class="diagram-list" id="diagramList"></div>
+        </div>
+        <form class="diagram-create" id="diagramCreateForm">
+          <h3>Criar nova aba</h3>
+          <label>Nome do diagrama</label>
+          <input id="newDiagramName" required maxlength="80" placeholder="Ex.: Treinamento de paralelismo" />
+          <label>Descrição</label>
+          <textarea id="newDiagramDescription" maxlength="240" placeholder="Finalidade desta tela"></textarea>
+          <label>Como deseja começar?</label>
+          <select id="newDiagramMode">
+            <option value="blank">Criar em branco</option>
+            <option value="layout">Copiar somente o layout atual</option>
+            <option value="complete">Copiar layout e lógicas do Control Building</option>
+          </select>
+          <div class="control-note" style="margin-top:12px">
+            O diagrama atual não será alterado. A nova aba terá rascunho e publicação próprios.
+          </div>
+          <div class="actions">
+            <button type="button" id="diagramRename">Renomear atual</button>
+            <button class="ok">Criar e abrir</button>
+          </div>
+          <p id="diagramMessage" class="hint"></p>
+        </form>
+      </div>
+    </dialog>
     <dialog id="operatorBox" class="operator-login">
       <form id="operatorForm">
         <h2>Identificação do operador</h2>
@@ -1590,6 +1673,7 @@
               <th>Sessão</th>
               <th>Operador</th>
               <th>Matrícula</th>
+              <th>Diagrama</th>
               <th>Acesso</th>
               <th>Última atividade</th>
               <th>Tempo</th>
@@ -2394,7 +2478,10 @@
         sessionToken = null,
         sessionWriteQueue = Promise.resolve(),
         undoStack = [],
-        diagram = { name: "Diagrama principal", items: {} };
+        diagram = { name: "Diagrama principal", items: {} },
+        currentDiagramId = localStorage.getItem("simuDiagramId") || "principal",
+        diagramCatalog = {},
+        publishedDiagramUnsubscribe = null;
       $("#alarmCount").textContent = "Alarmes: " + alarmTotal;
       const gridDynamics = new GridDynamics();
       const timeEngine = new TimeSeriesEngine({
@@ -2405,6 +2492,211 @@
             draw(!eng && !!operatorSession);
         },
       });
+      const safeDiagramId = (value) =>
+        String(value || "principal").replace(/[.#$\[\]/]/g, "-");
+      const draftPath = (id = currentDiagramId) =>
+        "engineering/diagrams/" + safeDiagramId(id) + "/draft";
+      const publishedPath = (id = currentDiagramId) =>
+        "published/diagrams/" + safeDiagramId(id);
+      const cleanDiagram = (value = diagram) =>
+        JSON.parse(JSON.stringify(value || { name: "Novo diagrama", items: {} }));
+      function diagramMetadata(id, data = diagram, extra = {}) {
+        const old = diagramCatalog[id] || {};
+        return {
+          id,
+          name: extra.name || data.name || old.name || "Diagrama sem nome",
+          description: extra.description ?? old.description ?? "",
+          createdAt: old.createdAt || extra.createdAt || Date.now(),
+          updatedAt: Date.now(),
+          publishedAt: extra.publishedAt ?? old.publishedAt ?? null,
+        };
+      }
+      function renderDiagramCatalog() {
+        const select = $("#diagramSelect"), list = $("#diagramList"),
+          entries = Object.entries(diagramCatalog).sort((a, b) =>
+            String(a[1].name || "").localeCompare(String(b[1].name || ""), "pt-BR"),
+          );
+        select.innerHTML = "";
+        for (const [id, meta] of entries) {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = meta.name || "Diagrama sem nome";
+          select.append(option);
+        }
+        if (!entries.length) {
+          const option = document.createElement("option");
+          option.value = "principal";
+          option.textContent = "Diagrama principal";
+          select.append(option);
+        }
+        if (diagramCatalog[currentDiagramId]) select.value = currentDiagramId;
+        if (!list) return;
+        list.innerHTML = "";
+        for (const [id, meta] of entries) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "diagram-card" + (id === currentDiagramId ? " active" : "");
+          button.innerHTML = "<strong></strong><small></small>";
+          button.querySelector("strong").textContent = meta.name || "Diagrama sem nome";
+          button.querySelector("small").textContent =
+            (meta.publishedAt ? "Publicado" : "Somente rascunho") +
+            (meta.description ? " — " + meta.description : "");
+          button.onclick = async () => {
+            await switchDiagram(id);
+            renderDiagramCatalog();
+          };
+          list.append(button);
+        }
+      }
+      async function ensureDiagramCatalog() {
+        const catalogSnapshot = await get(ref(db, "engineering/diagramCatalog"));
+        if (catalogSnapshot.exists()) {
+          diagramCatalog = catalogSnapshot.val() || {};
+          if (!diagramCatalog[currentDiagramId])
+            currentDiagramId = Object.keys(diagramCatalog)[0] || "principal";
+          renderDiagramCatalog();
+          return;
+        }
+        const [legacyDraft, legacyPublished] = await Promise.all([
+          get(ref(db, "engineering/draft")),
+          get(ref(db, "published/current")),
+        ]);
+        const draft = legacyDraft.exists()
+          ? legacyDraft.val()
+          : legacyPublished.exists()
+            ? legacyPublished.val()
+            : { name: "Diagrama principal", items: {} };
+        const meta = diagramMetadata("principal", draft, {
+          name: draft.name || "Diagrama principal",
+          publishedAt: legacyPublished.val()?.publishedAt || null,
+        });
+        diagramCatalog = { principal: meta };
+        currentDiagramId = "principal";
+        await Promise.all([
+          set(ref(db, draftPath("principal")), cleanDiagram(draft)),
+          set(ref(db, "engineering/diagramCatalog/principal"), meta),
+          legacyPublished.exists()
+            ? set(ref(db, "published/catalog/principal"), meta)
+            : Promise.resolve(),
+          legacyPublished.exists()
+            ? set(ref(db, "published/defaultDiagramId"), "principal")
+            : Promise.resolve(),
+          legacyPublished.exists()
+            ? set(ref(db, publishedPath("principal")), cleanDiagram(legacyPublished.val()))
+            : Promise.resolve(),
+        ]);
+        renderDiagramCatalog();
+      }
+      async function loadPublishedCatalog() {
+        const snapshot = await get(ref(db, "published/catalog"));
+        diagramCatalog = snapshot.exists() ? snapshot.val() || {} : {};
+        if (!Object.keys(diagramCatalog).length) {
+          const legacy = await get(ref(db, "published/current"));
+          if (legacy.exists())
+            diagramCatalog = {
+              principal: diagramMetadata("principal", legacy.val(), {
+                name: legacy.val().name || "Diagrama principal",
+                publishedAt: legacy.val().publishedAt || null,
+              }),
+            };
+        }
+        if (!diagramCatalog[currentDiagramId]) {
+          const preferred = await get(ref(db, "published/defaultDiagramId"));
+          currentDiagramId =
+            (preferred.exists() && diagramCatalog[preferred.val()] && preferred.val()) ||
+            Object.keys(diagramCatalog)[0] || "principal";
+        }
+        renderDiagramCatalog();
+      }
+      function resetDiagramWorkspace() {
+        selected = null;
+        selectedIds.clear();
+        undoStack = [];
+        copied = [];
+        resetControlRuleRuntime();
+        suppressAlarmUntil = Date.now() + 1000;
+        timeEngine.pause();
+        timeEngine.apply(diagram);
+        draw(false);
+      }
+      async function switchDiagram(id) {
+        id = safeDiagramId(id);
+        if (!diagramCatalog[id] || id === currentDiagramId) return;
+        currentDiagramId = id;
+        localStorage.setItem("simuDiagramId", id);
+        if (eng) {
+          const [draftSnapshot, publishedSnapshot] = await Promise.all([
+            get(ref(db, draftPath(id))),
+            get(ref(db, publishedPath(id))),
+          ]);
+          diagram = draftSnapshot.exists()
+            ? draftSnapshot.val()
+            : publishedSnapshot.exists()
+              ? publishedSnapshot.val()
+              : { name: diagramCatalog[id].name, items: {}, controlRules: [] };
+          resetDiagramWorkspace();
+          $("#status").textContent = "Diagrama aberto na engenharia: " + diagramCatalog[id].name;
+        } else {
+          subscribePublishedDiagram(id);
+        }
+        renderDiagramCatalog();
+      }
+      function subscribePublishedDiagram(id = currentDiagramId) {
+        if (publishedDiagramUnsubscribe) publishedDiagramUnsubscribe();
+        const path = diagramCatalog[id] ? publishedPath(id) : "published/current";
+        publishedDiagramUnsubscribe = onValue(
+          ref(db, path),
+          (snapshot) => {
+            if (eng) return;
+            if (snapshot.exists()) diagram = snapshot.val();
+            else diagram = { name: diagramCatalog[id]?.name || "Diagrama", items: {} };
+            resetControlRuleRuntime();
+            if (operatorSession) applyScenarioSimulation();
+            else {
+              timeEngine.pause();
+              timeEngine.apply(diagram);
+            }
+            draw();
+            $("#status").textContent = operatorSession
+              ? "Operação conectada — " + (diagramCatalog[id]?.name || diagram.name)
+              : "Modo de visualização — comandos bloqueados";
+          },
+          () => ($("#status").textContent = "Verifique as regras do Firebase"),
+        );
+      }
+      async function saveCurrentDiagramDraft() {
+        const data = cleanDiagram();
+        data.name = diagramCatalog[currentDiagramId]?.name || data.name || "Diagrama";
+        const meta = diagramMetadata(currentDiagramId, data);
+        await Promise.all([
+          set(ref(db, draftPath()), data),
+          set(ref(db, "engineering/diagramCatalog/" + currentDiagramId), meta),
+        ]);
+        diagram = data;
+        diagramCatalog[currentDiagramId] = meta;
+        localStorage.setItem("simuDraft:" + currentDiagramId, JSON.stringify(diagram));
+        renderDiagramCatalog();
+        return data;
+      }
+      async function publishCurrentDiagram() {
+        const now = Date.now(),
+          data = { ...cleanDiagram(), publishedAt: now };
+        data.name = diagramCatalog[currentDiagramId]?.name || data.name || "Diagrama";
+        const meta = diagramMetadata(currentDiagramId, data, { publishedAt: now });
+        await Promise.all([
+          set(ref(db, publishedPath()), data),
+          set(ref(db, "published/catalog/" + currentDiagramId), meta),
+          set(ref(db, "engineering/diagramCatalog/" + currentDiagramId), meta),
+          set(ref(db, "published/current"), data),
+          set(ref(db, "versions/" + currentDiagramId + "/" + now), data),
+        ]);
+        const defaultSnapshot = await get(ref(db, "published/defaultDiagramId"));
+        if (!defaultSnapshot.exists())
+          await set(ref(db, "published/defaultDiagramId"), currentDiagramId);
+        diagramCatalog[currentDiagramId] = meta;
+        renderDiagramCatalog();
+        return data;
+      }
       function sessionRecord() {
         if (!operatorSession) return null;
         const now = Date.now();
@@ -2412,6 +2704,12 @@
           operatorUid: operatorSession.operatorUid,
           name: operatorSession.name,
           registration: operatorSession.registration,
+          diagramId: operatorSession.diagramId || currentDiagramId,
+          diagramName:
+            operatorSession.diagramName ||
+            diagramCatalog[currentDiagramId]?.name ||
+            diagram.name ||
+            "Diagrama",
           startedAt: operatorSession.startedAt,
           lastSeenAt: now,
           endedAt: operatorSession.endedAt || null,
@@ -2463,6 +2761,9 @@
           operatorUid: auth.currentUser.uid,
           name,
           registration,
+          diagramId: currentDiagramId,
+          diagramName:
+            diagramCatalog[currentDiagramId]?.name || diagram.name || "Diagrama",
           startedAt: Date.now(),
           commands: 0,
           errors: 0,
@@ -2671,6 +2972,7 @@
             addHistoryCell(tr, (x.id || "").slice(-8).toUpperCase() || "—");
             addHistoryCell(tr, x.name || "—");
             addHistoryCell(tr, x.registration || "—");
+            addHistoryCell(tr, x.diagramName || "Diagrama anterior");
             addHistoryCell(
               tr,
               x.startedAt ? new Date(x.startedAt).toLocaleString("pt-BR") : "—",
@@ -6327,12 +6629,12 @@
         diagram = JSON.parse(undoStack.pop());
         selected = null;
         selectedIds.clear();
-        localStorage.setItem("simuDraft", JSON.stringify(diagram));
+        localStorage.setItem("simuDraft:" + currentDiagramId, JSON.stringify(diagram));
         draw();
         $("#status").textContent = "Alteração desfeita";
       }
       function local() {
-        localStorage.setItem("simuDraft", JSON.stringify(diagram));
+        localStorage.setItem("simuDraft:" + currentDiagramId, JSON.stringify(diagram));
         draw();
       }
       $("#name").onchange = (e) => {
@@ -7000,7 +7302,7 @@
       };
       $("#controlSaveDraft").onclick = async () => {
         try {
-          await set(ref(db, "engineering/draft"), JSON.parse(JSON.stringify(diagram)));
+          await saveCurrentDiagramDraft();
           $("#controlValidation").textContent = "Control Building salvo no rascunho ✓";
         } catch (error) {
           $("#controlValidation").textContent = "Falha ao salvar: " + (error.code || error.message);
@@ -7025,10 +7327,7 @@
         }
         if (!confirm("Publicar o diagrama e as lógicas do Control Building para a operação?")) return;
         try {
-          const now = Date.now(),
-            data = { ...JSON.parse(JSON.stringify(diagram)), publishedAt: now };
-          await set(ref(db, "published/current"), data);
-          await set(ref(db, "versions/" + now), data);
+          await publishCurrentDiagram();
           $("#controlValidation").classList.remove("invalid");
           $("#controlValidation").textContent = "Lógicas publicadas para a operação ✓";
         } catch (error) {
@@ -7397,7 +7696,8 @@
           speed: timeEngine.minutesPerSecond,
           startMinute: timeEngine.minute,
         };
-        if (eng) localStorage.setItem("simuDraft", JSON.stringify(diagram));
+        if (eng)
+          localStorage.setItem("simuDraft:" + currentDiagramId, JSON.stringify(diagram));
       }
       function applyScenarioSimulation() {
         const c = diagram.simulationConfig || {
@@ -7451,6 +7751,7 @@
           $("#resetAlarms").hidden =
             !on;
         $("#operatorLoginBtn").hidden = on || !!operatorSession;
+        $("#diagramManage").hidden = !on;
         $("#login").textContent = on
           ? "Sair da engenharia"
           : "Entrar como administrador";
@@ -7463,6 +7764,91 @@
         if (!on && $("#controlBox").open) $("#controlBox").close();
         updateTimeControls();
       }
+      $("#diagramSelect").onchange = async (event) => {
+        if (operatorSession && !eng) {
+          const proceed = confirm(
+            "Trocar de diagrama encerrará a sessão atual do operador. Deseja continuar?",
+          );
+          if (!proceed) {
+            event.target.value = currentDiagramId;
+            return;
+          }
+          await endOperatorSession();
+        }
+        await switchDiagram(event.target.value);
+      };
+      $("#diagramManage").onclick = () => {
+        renderDiagramCatalog();
+        $("#diagramMessage").textContent = "";
+        $("#diagramBox").showModal();
+      };
+      $("#diagramClose").onclick = () => $("#diagramBox").close();
+      $("#diagramRename").onclick = async () => {
+        const name = $("#newDiagramName").value.trim();
+        if (!name) {
+          $("#diagramMessage").textContent = "Informe o novo nome do diagrama atual.";
+          return;
+        }
+        try {
+          diagram.name = name;
+          const meta = diagramMetadata(currentDiagramId, diagram, {
+            name,
+            description:
+              $("#newDiagramDescription").value.trim() ||
+              diagramCatalog[currentDiagramId]?.description || "",
+          });
+          diagramCatalog[currentDiagramId] = meta;
+          await Promise.all([
+            set(ref(db, "engineering/diagramCatalog/" + currentDiagramId), meta),
+            set(ref(db, draftPath()), cleanDiagram()),
+            meta.publishedAt
+              ? set(ref(db, "published/catalog/" + currentDiagramId), meta)
+              : Promise.resolve(),
+          ]);
+          renderDiagramCatalog();
+          $("#diagramMessage").textContent = "Diagrama renomeado ✓";
+        } catch (error) {
+          $("#diagramMessage").textContent = "Falha ao renomear: " + (error.code || error.message);
+        }
+      };
+      $("#diagramCreateForm").onsubmit = async (event) => {
+        event.preventDefault();
+        const name = $("#newDiagramName").value.trim(),
+          description = $("#newDiagramDescription").value.trim(),
+          mode = $("#newDiagramMode").value,
+          id = safeDiagramId(Date.now() + "-" + crypto.randomUUID()),
+          source = cleanDiagram();
+        if (!name) return;
+        let created;
+        if (mode === "blank") {
+          created = { name, description, items: {}, controlRules: [] };
+        } else {
+          created = source;
+          created.name = name;
+          created.description = description;
+          delete created.publishedAt;
+          if (mode === "layout") created.controlRules = [];
+        }
+        const meta = diagramMetadata(id, created, {
+          name,
+          description,
+          createdAt: Date.now(),
+          publishedAt: null,
+        });
+        try {
+          await Promise.all([
+            set(ref(db, "engineering/diagrams/" + id + "/draft"), created),
+            set(ref(db, "engineering/diagramCatalog/" + id), meta),
+          ]);
+          diagramCatalog[id] = meta;
+          $("#diagramCreateForm").reset();
+          $("#diagramBox").close();
+          await switchDiagram(id);
+          $("#status").textContent = "Nova aba criada: " + name;
+        } catch (error) {
+          $("#diagramMessage").textContent = "Falha ao criar: " + (error.code || error.message);
+        }
+      };
       $("#operatorLoginBtn").onclick = () => {
         if (!$("#operatorBox").open) $("#operatorBox").showModal();
       };
@@ -7530,6 +7916,8 @@
         if (user?.isAnonymous) {
           await recoverPreviousSession(user);
           setMode(false);
+          await loadPublishedCatalog();
+          subscribePublishedDiagram(currentDiagramId);
           $("#status").textContent =
             "Modo de visualização — comandos bloqueados";
           return;
@@ -7541,13 +7929,14 @@
             setMode(true);
             $("#loginBox").close();
             if ($("#operatorBox").open) $("#operatorBox").close();
-            const d = await get(ref(db, "engineering/draft"));
+            await ensureDiagramCatalog();
+            const d = await get(ref(db, draftPath()));
             if (d.exists()) diagram = d.val();
             else {
-              const p = await get(ref(db, "published/current"));
+              const p = await get(ref(db, publishedPath()));
               if (p.exists()) diagram = p.val();
             }
-            draw();
+            resetDiagramWorkspace();
             $("#status").textContent = "Engenharia conectada";
           } catch (e) {
             $("#loginError").textContent = "Conta sem permissão de engenharia.";
@@ -7563,12 +7952,9 @@
           }
         }
       });
-      const cleanDiagramData = () => JSON.parse(JSON.stringify(diagram));
       $("#save").onclick = async () => {
         try {
-          const data = cleanDiagramData();
-          await set(ref(db, "engineering/draft"), data);
-          diagram = data;
+          await saveCurrentDiagramDraft();
           $("#status").textContent = "Rascunho salvo ✓";
         } catch (e) {
           console.error("Falha ao salvar rascunho", e);
@@ -7587,11 +7973,8 @@
         }
         if (!confirm("Publicar para a operação?")) return;
         try {
-          const now = Date.now();
           saveSimulationConfig();
-          const data = { ...cleanDiagramData(), publishedAt: now };
-          await set(ref(db, "published/current"), data);
-          await set(ref(db, "versions/" + now), data);
+          await publishCurrentDiagram();
           $("#status").textContent = "Versão publicada ✓";
         } catch (e) {
           console.error("Falha ao publicar", e);
@@ -7599,25 +7982,6 @@
             "Falha ao publicar: " + (e.code || e.message || "erro no Firebase");
         }
       };
-      onValue(
-        ref(db, "published/current"),
-        (s) => {
-          if (!eng) {
-            if (s.exists()) diagram = s.val();
-            resetControlRuleRuntime();
-            if (operatorSession) applyScenarioSimulation();
-            else {
-              timeEngine.pause();
-              timeEngine.apply(diagram);
-            }
-            draw();
-            $("#status").textContent = operatorSession
-              ? "Operação conectada"
-              : "Modo de visualização — comandos bloqueados";
-          }
-        },
-        () => ($("#status").textContent = "Verifique as regras do Firebase"),
-      );
       document.querySelectorAll(".ribbon-tab").forEach((t) =>
         t.addEventListener("click", () => {
           document
