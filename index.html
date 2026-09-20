@@ -2037,6 +2037,10 @@
               <p class="control-note wide" style="margin:0">
                 O bloqueio pode funcionar sozinho, sem alarme e sem comando automático. O operador receberá a mensagem “COMANDO BLOQUEADO”.
               </p>
+              <label class="control-check wide"><input id="ruleInhibitAlarm" type="checkbox" /> INIBIR os alarmes resultantes desta tentativa de comando</label>
+              <p class="control-note wide" style="margin:0">
+                A manobra será executada normalmente. Quando as condições adicionais forem atendidas, os alarmes causados por essa manobra serão suprimidos.
+              </p>
 
               <h4 class="wide" style="margin:8px 0 0">Proteção ou comando automático</h4>
               <label>Equipamento comandado<select id="ruleActionTarget"><option value="">Nenhum comando automático</option></select></label>
@@ -4921,6 +4925,7 @@
         }
       }
       function raiseAlarm(k, o, message, options = {}) {
+        if (!options.force && Date.now() < suppressAlarmUntil) return false;
         alarmTotal++;
         recordOperatorError(k, o, message, options);
         $("#alarmCount").textContent = "Alarmes: " + alarmTotal;
@@ -4942,6 +4947,7 @@
         $("#status").textContent =
           "MANOBRA ERRADA — " + (o.name || fallback.toLowerCase());
         if (!$("#alarmBox").open) $("#alarmBox").showModal();
+        return true;
       }
       function controlRules() {
         return Array.isArray(diagram.controlRules) ? diagram.controlRules : [];
@@ -7388,6 +7394,8 @@
         $("#ruleIgnoreMaintenance").checked = true;
         $("#ruleAlarm").checked = true;
         $("#ruleRegisterError").checked = true;
+        $("#ruleBlockCommand").checked = false;
+        $("#ruleInhibitAlarm").checked = false;
         $("#rulePriority").value = "high";
         $("#ruleDelay").value = "0";
         $("#ruleVariable").value = "colorState";
@@ -7432,6 +7440,7 @@
         $("#ruleAlarm").checked = rule.alarm !== false;
         $("#ruleRegisterError").checked = rule.registerError !== false;
         $("#ruleBlockCommand").checked = !!rule.blockCommand;
+        $("#ruleInhibitAlarm").checked = !!rule.inhibitAlarm;
         $("#rulePriority").value = rule.priority || "high";
         $("#ruleMessage").value = rule.message || "";
         $("#ruleActionTarget").value = rule.actionTargetId || "";
@@ -7488,6 +7497,7 @@
           alarm: $("#ruleAlarm").checked,
           registerError: $("#ruleRegisterError").checked,
           blockCommand: $("#ruleBlockCommand").checked,
+          inhibitAlarm: $("#ruleInhibitAlarm").checked,
           priority: $("#rulePriority").value,
           message: $("#ruleMessage").value.trim(),
           actionTargetId: $("#ruleActionTarget").value,
@@ -7506,6 +7516,8 @@
           !["comparison", "command"].includes(rule.triggerMode)
         )
           return "O bloqueio deve usar Comparação/limite ou Tentativa de comando.";
+        if (rule.inhibitAlarm && rule.triggerMode !== "command")
+          return "A inibição de alarme deve usar o tipo de disparo Tentativa de comando.";
         if (
           rule.conditions?.some(
             (condition) =>
@@ -7517,9 +7529,10 @@
           !rule.alarm &&
           !rule.registerError &&
           !rule.actionTargetId &&
-          !rule.blockCommand
+          !rule.blockCommand &&
+          !rule.inhibitAlarm
         )
-          return "Escolha pelo menos uma ação: alarme, registro, bloqueio ou proteção/comando automático.";
+          return "Escolha pelo menos uma ação: alarme, registro, bloqueio, inibição de alarme ou proteção/comando automático.";
         if (rule.actionTargetId && !diagram.items?.[rule.actionTargetId])
           return "Selecione um equipamento válido para o comando automático.";
         if (rule.actionTargetId) {
@@ -8081,6 +8094,8 @@
           blockingRule =
             attemptRules.find((rule) => rule.blockCommand) ||
             (o && commandBlockingRule(equipmentId));
+        if (attemptRules.some((rule) => rule.inhibitAlarm))
+          suppressAlarmUntil = Date.now() + 1500;
         if (blockingRule) {
           pending = null;
           $("#cmd").close();
