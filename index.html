@@ -1198,6 +1198,7 @@
         gap: 4px;
         font-weight: 750;
       }
+      .control-grid label[hidden] { display: none; }
       .control-grid input,
       .control-grid select,
       .control-grid textarea {
@@ -4939,9 +4940,31 @@
         if (operator === "lte") return +a <= +target;
         return false;
       }
+      const numericControlVariables = new Set([
+        "voltageKV",
+        "currentA",
+        "activePowerMW",
+        "reactivePowerMvar",
+        "powerFactor",
+        "loadingPercent",
+        "overfluxPercent",
+        "frequencyHz",
+      ]);
+      function effectiveTriggerMode(rule) {
+        // Compatibilidade com regras criadas quando o operador de comparação
+        // aparecia indevidamente no modo Mudança de valor.
+        if (
+          rule.triggerMode === "transition" &&
+          numericControlVariables.has(rule.variable) &&
+          ["gt", "gte", "lt", "lte"].includes(rule.operator) &&
+          Number.isFinite(Number(rule.to))
+        )
+          return "comparison";
+        return rule.triggerMode || "transition";
+      }
       function ruleMatches(rule, previous, current) {
         if (current === undefined || current === null) return false;
-        if (rule.triggerMode === "comparison")
+        if (effectiveTriggerMode(rule) === "comparison")
           return compareRuleValue(current, rule.operator || "eq", rule.to);
         if (previous === undefined) return false;
         return (
@@ -4987,7 +5010,7 @@
             return false;
           const current = controlValue(equipmentId, rule.variable),
             runtime = controlRuleRuntime.get(rule.id) || {};
-          const triggerMatched = rule.triggerMode === "comparison"
+          const triggerMatched = effectiveTriggerMode(rule) === "comparison"
             ? compareRuleValue(current, rule.operator || "eq", rule.to)
             : ruleMatches(rule, runtime.previous, current);
           return triggerMatched && auxiliaryConditionMatches(rule);
@@ -5048,7 +5071,7 @@
                 diagram.items[rule.equipmentId].inMaintenance
               ),
             rising =
-              rule.triggerMode === "comparison"
+              effectiveTriggerMode(rule) === "comparison"
                 ? matched && runtime.active !== true
                 : matched;
           runtime.previous = current;
@@ -5070,7 +5093,7 @@
             controlRuleTimers.delete(rule.id);
             const live = controlValue(rule.equipmentId, rule.variable),
               stillValid =
-                rule.triggerMode === "comparison"
+                effectiveTriggerMode(rule) === "comparison"
                   ? compareRuleValue(live, rule.operator || "eq", rule.to)
                   : compareRuleValue(live, "eq", rule.to);
             if (!stillValid || !auxiliaryConditionMatches(rule)) return;
@@ -5101,7 +5124,7 @@
             rule.enabled !== false &&
             rule.equipmentId === equipmentId &&
             rule.variable === variable &&
-            rule.triggerMode === "comparison",
+            effectiveTriggerMode(rule) === "comparison",
         );
       }
       function triggerProtectedAlarm(k, o) {
@@ -7150,6 +7173,13 @@
         $("#ruleToLabel").firstChild.textContent = comparison
           ? "Valor limite"
           : "Novo valor";
+        $("#ruleFrom").required = !comparison;
+        $("#ruleFrom").placeholder = comparison ? "" : "Ex.: vermelho";
+        $("#ruleTo").placeholder = comparison ? "Ex.: 50" : "Ex.: preto";
+        $("#controlValidation").classList.remove("invalid");
+        $("#controlValidation").textContent = comparison
+          ? "A lógica atua quando o valor cruza o limite e permanece na condição escolhida."
+          : "A lógica atua somente na mudança exata entre o valor anterior e o novo valor.";
       }
       function blankControlRule() {
         selectedControlRule = null;
@@ -7181,7 +7211,7 @@
         $("#ruleLatch").checked = !!rule.latch;
         $("#ruleEquipment").value = rule.equipmentId || "";
         $("#ruleVariable").value = rule.variable || "colorState";
-        $("#ruleTriggerMode").value = rule.triggerMode || "transition";
+        $("#ruleTriggerMode").value = effectiveTriggerMode(rule);
         $("#ruleOperator").value = rule.operator || "eq";
         $("#ruleFrom").value = rule.from ?? "";
         $("#ruleTo").value = rule.to ?? "";
