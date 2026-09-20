@@ -1511,6 +1511,9 @@
               <b>✎</b>Editar grupo</button
             ><button class="tool" type="button" id="ungroupConductors">
               <b>⛓</b>Desagrupar
+            </button
+            ><button class="tool" type="button" id="configureSelectedTopology">
+              <b>⌘</b>Configurar conexões
             </button>
           </div>
           <span class="hint"
@@ -1884,7 +1887,7 @@
           <div class="grow"></div>
           <button type="button" id="topologyClose">Fechar</button>
         </div>
-        <p class="topology-note">
+        <p class="topology-note" id="topologyNote">
           Defina a ligação elétrica pelos TAGs. Quando os dois terminais estiverem
           configurados, esta informação terá prioridade sobre a posição do desenho.
           O sentido da potência continuará sendo calculado dinamicamente.
@@ -1900,9 +1903,9 @@
               <option value="generator_breaker">Disjuntor de gerador</option>
               <option value="utility_incomer">Entrada da concessionária</option>
             </select></label
-          ><label
+          ><label id="topologyTerminalALabel"
             >Terminal A conectado a<select id="topologyTerminalA"></select></label
-          ><label
+          ><label id="topologyTerminalBLabel"
             >Terminal B conectado a<select id="topologyTerminalB"></select></label
           ><label
             >Identificação automática<input
@@ -3147,19 +3150,21 @@
         return A.some((p) => B.some((q) => d2(p, q) <= 24));
       }
       function hasExplicitTopology(o) {
-        return !!(
-          o &&
-          (o.type === "breaker" || o.type === "disconnector") &&
-          o.topology?.terminalA &&
-          o.topology?.terminalB
-        );
+        if (!o?.topology?.terminalA) return false;
+        return terminals(o).length === 1 || !!o.topology.terminalB;
       }
       function topologyTargets(o) {
         return hasExplicitTopology(o)
-          ? [o.topology.terminalA, o.topology.terminalB]
+          ? [o.topology.terminalA, o.topology.terminalB].filter(Boolean)
           : [];
       }
       function itemsConnected(idA, a, idB, b) {
+        if (
+          a?.conductorGroupId &&
+          b?.conductorGroupId &&
+          a.conductorGroupId === b.conductorGroupId
+        )
+          return true;
         const aExplicit = hasExplicitTopology(a),
           bExplicit = hasExplicitTopology(b);
         if (aExplicit || bExplicit)
@@ -3167,12 +3172,6 @@
             topologyTargets(a).includes(idB) ||
             topologyTargets(b).includes(idA)
           );
-        if (
-          a?.conductorGroupId &&
-          b?.conductorGroupId &&
-          a.conductorGroupId === b.conductorGroupId
-        )
-          return true;
         return touching(a, b);
       }
       function topologyPoint(target, fromPoint, role) {
@@ -6649,7 +6648,7 @@
                 " objetos selecionados — arraste um deles para mover o grupo"
             : "Selecione um componente";
         $("#topologyBtn").hidden = !(
-          o && (o.type === "breaker" || o.type === "disconnector")
+          selected && diagram.items[selected] && isElectrical(diagram.items[selected])
         );
         if (!o) return;
         $("#name").value = o.name || "";
@@ -6939,10 +6938,17 @@
           : "Equipamento inexistente";
       }
       function topologyIssue(o, role, aId, bId) {
-        if (!aId || !bId) return "Selecione os equipamentos dos terminais A e B.";
-        if (aId === bId) return "Os terminais A e B devem ligar equipamentos diferentes.";
+        const oneTerminal = terminals(o).length === 1;
+        if (!aId)
+          return oneTerminal
+            ? "Selecione o equipamento conectado ao terminal."
+            : "Selecione os equipamentos dos terminais A e B.";
+        if (!oneTerminal && !bId)
+          return "Selecione os equipamentos dos terminais A e B.";
+        if (!oneTerminal && aId === bId)
+          return "Os terminais A e B devem ligar equipamentos diferentes.";
         const a = diagram.items[aId],
-          b = diagram.items[bId],
+          b = bId ? diagram.items[bId] : null,
           logicalType = (id, item) =>
             item?.conductorGroupId &&
             conductorGroupMembers(item.conductorGroupId).some(
@@ -6952,8 +6958,9 @@
               : item?.type,
           aType = logicalType(aId, a),
           bType = logicalType(bId, b),
-          types = new Set([aType, bType]);
-        if (!a || !b) return "Uma das referências não existe mais no diagrama.";
+          types = new Set([aType, bType].filter(Boolean));
+        if (!a || (!oneTerminal && !b))
+          return "Uma das referências não existe mais no diagrama.";
         if (
           (role === "transformer_primary" || role === "transformer_secondary") &&
           !types.has("transformer")
@@ -6971,21 +6978,41 @@
       }
       function updateTopologyPreview() {
         const o = diagram.items[selected],
+          oneTerminal = terminals(o).length === 1,
           role = $("#topologyRole").value,
           a = $("#topologyTerminalA").value,
           b = $("#topologyTerminalB").value,
           issue = topologyIssue(o, role, a, b),
           status = $("#topologyStatus");
         $("#topologySummary").value =
-          a && b ? topologyLabel(a) + " ↔ " + topologyLabel(b) : "Sem configuração";
+          a && (oneTerminal || b)
+            ? oneTerminal
+              ? topologyLabel(a)
+              : topologyLabel(a) + " ↔ " + topologyLabel(b)
+            : "Sem configuração";
         status.classList.toggle("invalid", !!issue);
         status.textContent = issue ||
           "Conexão válida: " + topologyRoleNames[role] + ". O vínculo será salvo pelos identificadores dos equipamentos.";
         return !issue;
       }
       function openTopology() {
+        const initial = diagram.items[selected];
+        if (initial?.conductorGroupId) {
+          const representative = conductorGroupRepresentative(initial.conductorGroupId);
+          if (representative) selected = representative;
+        }
         const o = diagram.items[selected];
-        if (!o || !(o.type === "breaker" || o.type === "disconnector")) return;
+        if (!o || !isElectrical(o)) return;
+        const oneTerminal = terminals(o).length === 1,
+          switchingDevice = o.type === "breaker" || o.type === "disconnector";
+        $("#topologyTerminalALabel").firstChild.textContent = oneTerminal
+          ? "Conectado a"
+          : "Terminal A conectado a";
+        $("#topologyTerminalBLabel").hidden = oneTerminal;
+        $("#topologyRole").disabled = !switchingDevice;
+        $("#topologyNote").textContent = oneTerminal
+          ? "Defina qual equipamento alimenta ou recebe energia deste componente. Esta ligação terá prioridade sobre a posição do desenho."
+          : "Defina a ligação elétrica dos dois terminais pelos TAGs. Esta informação terá prioridade sobre a posição do desenho.";
         for (const select of [$("#topologyTerminalA"), $("#topologyTerminalB")]) {
           select.innerHTML = '<option value="">Selecione um equipamento</option>';
           Object.entries(diagram.items || {})
@@ -7004,7 +7031,9 @@
               select.append(option);
             });
         }
-        $("#topologyRole").value = o.topology?.role || "generic";
+        $("#topologyRole").value = switchingDevice
+          ? o.topology?.role || "generic"
+          : "generic";
         $("#topologyTerminalA").value = o.topology?.terminalA || "";
         $("#topologyTerminalB").value = o.topology?.terminalB || "";
         updateTopologyPreview();
@@ -7341,6 +7370,13 @@
       $("#runPowerFlow").onclick = runPowerFlowStudy;
       $("#electricalBtn").onclick = openElectrical;
       $("#topologyBtn").onclick = openTopology;
+      $("#configureSelectedTopology").onclick = () => {
+        if (!selected || !diagram.items[selected] || !isElectrical(diagram.items[selected])) {
+          $("#status").textContent = "Selecione um equipamento elétrico para configurar";
+          return;
+        }
+        openTopology();
+      };
       for (const id of ["topologyRole", "topologyTerminalA", "topologyTerminalB"])
         $("#" + id).onchange = updateTopologyPreview;
       $("#topologyClose").onclick = $("#topologyCancel").onclick = () =>
@@ -7360,9 +7396,13 @@
         if (!o || !updateTopologyPreview()) return;
         pushHistory();
         o.topology = {
-          role: $("#topologyRole").value,
+          role:
+            o.type === "breaker" || o.type === "disconnector"
+              ? $("#topologyRole").value
+              : "generic",
           terminalA: $("#topologyTerminalA").value,
-          terminalB: $("#topologyTerminalB").value,
+          terminalB:
+            terminals(o).length === 1 ? "" : $("#topologyTerminalB").value,
         };
         local();
         $("#topologyBox").close();
