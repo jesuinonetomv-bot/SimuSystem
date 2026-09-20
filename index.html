@@ -2683,6 +2683,15 @@
         if (!diagramCatalog[id] || id === currentDiagramId) return;
         currentDiagramId = id;
         localStorage.setItem("simuDiagramId", id);
+        if (operatorSession) {
+          operatorSession.currentDiagramId = id;
+          operatorSession.currentDiagramName =
+            diagramCatalog[id]?.name || "Diagrama";
+          operatorSession.visitedDiagrams = Array.from(
+            new Set([...(operatorSession.visitedDiagrams || []), id]),
+          );
+          await persistOperatorSession();
+        }
         if (eng) {
           const [draftSnapshot, publishedSnapshot] = await Promise.all([
             get(ref(db, draftPath(id))),
@@ -2769,6 +2778,15 @@
             diagramCatalog[currentDiagramId]?.name ||
             diagram.name ||
             "Diagrama",
+          currentDiagramId:
+            operatorSession.currentDiagramId || currentDiagramId,
+          currentDiagramName:
+            operatorSession.currentDiagramName ||
+            diagramCatalog[currentDiagramId]?.name ||
+            diagram.name ||
+            "Diagrama",
+          visitedDiagrams:
+            operatorSession.visitedDiagrams || [currentDiagramId],
           startedAt: operatorSession.startedAt,
           lastSeenAt: now,
           endedAt: operatorSession.endedAt || null,
@@ -2823,6 +2841,10 @@
           diagramId: currentDiagramId,
           diagramName:
             diagramCatalog[currentDiagramId]?.name || diagram.name || "Diagrama",
+          currentDiagramId,
+          currentDiagramName:
+            diagramCatalog[currentDiagramId]?.name || diagram.name || "Diagrama",
+          visitedDiagrams: [currentDiagramId],
           startedAt: Date.now(),
           commands: 0,
           errors: 0,
@@ -8118,16 +8140,6 @@
         updateTimeControls();
       }
       $("#diagramSelect").onchange = async (event) => {
-        if (operatorSession && !eng) {
-          const proceed = confirm(
-            "Trocar de diagrama encerrará a sessão atual do operador. Deseja continuar?",
-          );
-          if (!proceed) {
-            event.target.value = currentDiagramId;
-            return;
-          }
-          await endOperatorSession();
-        }
         await switchDiagram(event.target.value);
       };
       $("#diagramManage").onclick = () => {
