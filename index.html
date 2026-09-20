@@ -1969,6 +1969,7 @@
                 <option value="currentA">Corrente (A)</option>
                 <option value="activePowerMW">Potência ativa (MW)</option>
                 <option value="reactivePowerMvar">Potência reativa (MVAr)</option>
+                <option value="apparentPowerMVA">Potência aparente (MVA)</option>
                 <option value="powerFactor">Fator de potência</option>
                 <option value="loadingPercent">Carregamento (%)</option>
                 <option value="overfluxPercent">Sobrefluxo V/Hz (%)</option>
@@ -2003,6 +2004,7 @@
                 <option value="currentA">Corrente (A)</option>
                 <option value="activePowerMW">Potência ativa (MW)</option>
                 <option value="reactivePowerMvar">Potência reativa (MVAr)</option>
+                <option value="apparentPowerMVA">Potência aparente (MVA)</option>
                 <option value="powerFactor">Fator de potência</option>
                 <option value="loadingPercent">Carregamento (%)</option>
                 <option value="overfluxPercent">Sobrefluxo V/Hz (%)</option>
@@ -4107,6 +4109,7 @@
                   terminals(diagram.items[k])[1],
                 ),
                 attached =
+                  (zoneLoads.length > 0 || zoneTGs.length > 0) &&
                   component >= 0 &&
                   zone.some((n) =>
                     terminals(diagram.items[n]).some(
@@ -4185,6 +4188,20 @@
                 });
               }
           }
+          // Um transformador só pode transportar potência se o seu secundário
+          // alcançar uma zona com carga ou geração através de todos os
+          // dispositivos fechados. Sem isso, uma linha intermediária entre o
+          // transformador e um disjuntor aberto podia manter uma alocação
+          // calculada anteriormente e exibir corrente/potência inexistentes.
+          if (external.length)
+            for (const k of tfSourceIds)
+              if (!assignedTransformers.has(k))
+                tfAllocation.set(k, {
+                  p: 0,
+                  q: 0,
+                  parallelCount: 1,
+                  isolatedSecondary: true,
+                });
           // Quando o operador força a corrente da concessionária, esse valor
           // representa o intercâmbio efetivo na fronteira da rede. Repassa o
           // mesmo P/Q aos transformadores conectados, mantendo o sinal:
@@ -4194,7 +4211,10 @@
           const forcedUtilityEntries = utilityEntries.filter((k) =>
             Number.isFinite(+electricalData(diagram.items[k]).forcedCurrentA),
           );
-          if (forcedUtilityEntries.length && tfSourceIds.length) {
+          const connectedTfSourceIds = tfSourceIds.filter((k) =>
+            assignedTransformers.has(k),
+          );
+          if (forcedUtilityEntries.length && connectedTfSourceIds.length) {
             const interchange = utilityEntries.reduce(
                 (total, k) => {
                   const dispatch = effectiveUtilityDispatch(k);
@@ -4204,7 +4224,7 @@
                 },
                 { p: 0, q: 0 },
               ),
-              weights = tfSourceIds.map((k) => {
+              weights = connectedTfSourceIds.map((k) => {
                 const e = electricalData(diagram.items[k]);
                 return Math.max(
                   0.1,
@@ -4213,7 +4233,7 @@
                 );
               }),
               totalWeight = weights.reduce((sum, value) => sum + value, 0);
-            tfSourceIds.forEach((k, index) => {
+            connectedTfSourceIds.forEach((k, index) => {
               const ratio = weights[index] / totalWeight;
               tfAllocation.set(k, {
                 p: interchange.p * ratio,
@@ -4902,6 +4922,8 @@
         if (variable === "state") return o.state || "";
         if (variable === "activePowerMW") return r?.activeMW;
         if (variable === "reactivePowerMvar") return r?.reactiveMvar;
+        if (variable === "apparentPowerMVA")
+          return r ? Math.hypot(r.activeMW || 0, r.reactiveMvar || 0) : undefined;
         return r?.[variable];
       }
       function normalizedRuleValue(value, sample) {
@@ -4945,6 +4967,7 @@
         "currentA",
         "activePowerMW",
         "reactivePowerMvar",
+        "apparentPowerMVA",
         "powerFactor",
         "loadingPercent",
         "overfluxPercent",
@@ -7114,6 +7137,7 @@
         currentA: "Corrente",
         activePowerMW: "Potência ativa",
         reactivePowerMvar: "Potência reativa",
+        apparentPowerMVA: "Potência aparente",
         powerFactor: "Fator de potência",
         loadingPercent: "Carregamento",
         overfluxPercent: "Sobrefluxo V/Hz",
