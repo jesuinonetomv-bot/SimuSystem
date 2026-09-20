@@ -1208,6 +1208,18 @@
         background: #fff;
       }
       .control-grid .wide { grid-column: 1 / -1; }
+      .condition-list { display: grid; gap: 8px; }
+      .condition-row {
+        display: grid;
+        grid-template-columns: minmax(190px, 1.4fr) minmax(150px, 1fr) minmax(130px, .8fr) minmax(120px, .8fr) auto;
+        gap: 8px;
+        align-items: end;
+        padding: 9px;
+        border: 1px solid #c7d2d7;
+        background: #f6f9fa;
+      }
+      .condition-row label { min-width: 0; }
+      .condition-remove { min-height: 42px; color: #9c241e; }
       .control-check {
         flex-direction: row !important;
         align-items: center;
@@ -1281,6 +1293,7 @@
         .control-body { grid-template-columns: 1fr; }
         .control-list { max-height: 220px; border-right: 0; border-bottom: 1px solid #bac7cc; }
         .control-grid { grid-template-columns: 1fr; }
+        .condition-row { grid-template-columns: 1fr; }
         .diagram-switcher { min-width: 0; }
         .diagram-switcher select { max-width: 135px; min-width: 100px; }
         .diagram-manager-grid { grid-template-columns: 1fr; }
@@ -1978,6 +1991,7 @@
               <label>Tipo de disparo<select id="ruleTriggerMode">
                 <option value="transition">Mudança de valor</option>
                 <option value="comparison">Comparação/limite</option>
+                <option value="command">Tentativa de comando</option>
               </select></label>
               <label id="ruleOperatorLabel">Comparação<select id="ruleOperator">
                 <option value="eq">Igual a</option>
@@ -1989,33 +2003,22 @@
               </select></label>
               <label id="ruleFromLabel">Valor anterior<input id="ruleFrom" placeholder="Ex.: vermelho" /></label>
               <label id="ruleToLabel">Novo valor / limite<input id="ruleTo" required placeholder="Ex.: preto" /></label>
+              <label id="ruleCommandLabel" hidden>Comando tentado<select id="ruleCommandState">
+                <option value="any">Qualquer comando</option>
+                <option value="open">Abrir</option>
+                <option value="closed">Fechar</option>
+                <option value="stopped">Parar/indisponibilizar</option>
+                <option value="running">Colocar em operação</option>
+                <option value="inactive">Desativar carga</option>
+                <option value="active">Ativar carga</option>
+              </select></label>
               <label>Temporização (s)<input id="ruleDelay" type="number" min="0" max="3600" step="0.1" value="0" /></label>
               <label class="control-check"><input id="ruleIgnoreMaintenance" type="checkbox" checked /> Bloquear durante manutenção</label>
 
-              <h3 class="control-section">Condição adicional opcional (E)</h3>
-              <label class="control-check"><input id="ruleConditionEnabled" type="checkbox" /> Exigir uma segunda condição</label>
-              <label>Equipamento da condição<select id="ruleConditionEquipment"></select></label>
-              <label>Variável da condição<select id="ruleConditionVariable">
-                <option value="colorState">Cor/condição elétrica</option>
-                <option value="energized">Energizado</option>
-                <option value="state">Estado do equipamento</option>
-                <option value="maintenance">Liberado para manutenção</option>
-                <option value="voltageKV">Tensão (kV)</option>
-                <option value="currentA">Corrente (A)</option>
-                <option value="activePowerMW">Potência ativa (MW)</option>
-                <option value="reactivePowerMvar">Potência reativa (MVAr)</option>
-                <option value="apparentPowerMVA">Potência aparente (MVA)</option>
-                <option value="powerFactor">Fator de potência</option>
-                <option value="loadingPercent">Carregamento (%)</option>
-                <option value="overfluxPercent">Sobrefluxo V/Hz (%)</option>
-                <option value="frequencyHz">Frequência (Hz)</option>
-              </select></label>
-              <label>Operador da condição<select id="ruleConditionOperator">
-                <option value="eq">Igual a</option><option value="neq">Diferente de</option>
-                <option value="gt">Maior que</option><option value="gte">Maior ou igual</option>
-                <option value="lt">Menor que</option><option value="lte">Menor ou igual</option>
-              </select></label>
-              <label>Valor da condição<input id="ruleConditionValue" placeholder="Ex.: closed ou 59.5" /></label>
+              <h3 class="control-section">Condições adicionais</h3>
+              <label>Combinação<select id="ruleConditionLogic"><option value="all">Todas (E)</option><option value="any">Pelo menos uma (OU)</option></select></label>
+              <div class="wide condition-list" id="ruleConditions"></div>
+              <button type="button" id="addRuleCondition">+ Adicionar condição</button>
 
               <h3 class="control-section">Ações</h3>
               <label class="control-check"><input id="ruleAlarm" type="checkbox" checked /> Gerar alarme</label>
@@ -5018,10 +5021,26 @@
         );
       }
       function auxiliaryConditionMatches(rule) {
-        const condition = rule.condition;
-        if (!condition?.enabled) return true;
-        const current = controlValue(condition.equipmentId, condition.variable);
-        return compareRuleValue(current, condition.operator || "eq", condition.value);
+        const conditions = Array.isArray(rule.conditions)
+          ? rule.conditions
+          : rule.condition?.enabled
+            ? [rule.condition]
+            : [];
+        if (!conditions.length) return true;
+        const matches = conditions.map((condition) => {
+          const current = controlValue(
+            condition.equipmentId,
+            condition.variable,
+          );
+          return compareRuleValue(
+            current,
+            condition.operator || "eq",
+            condition.value,
+          );
+        });
+        return rule.conditionLogic === "any"
+          ? matches.some(Boolean)
+          : matches.every(Boolean);
       }
       function applyAutomaticCommand(targetId, nextState) {
         const target = diagram.items?.[targetId];
@@ -5040,12 +5059,36 @@
           return o.state === "stopped" || o.isSource === false ? "running" : "stopped";
         return "";
       }
+      function commandAttemptRules(equipmentId) {
+        const equipment = diagram.items?.[equipmentId],
+          intended = intendedCommandState(equipment);
+        return controlRules().filter((rule) => {
+          if (
+            rule.enabled === false ||
+            effectiveTriggerMode(rule) !== "command" ||
+            rule.equipmentId !== equipmentId
+          )
+            return false;
+          if (
+            rule.ignoreMaintenance &&
+            (maintenance[equipmentId] || equipment?.inMaintenance)
+          )
+            return false;
+          return (
+            (!rule.commandState ||
+              rule.commandState === "any" ||
+              rule.commandState === intended) &&
+            auxiliaryConditionMatches(rule)
+          );
+        });
+      }
       function commandBlockingRule(equipmentId) {
         return controlRules().find((rule) => {
           if (
             rule.enabled === false ||
             !rule.blockCommand ||
-            rule.equipmentId !== equipmentId
+            rule.equipmentId !== equipmentId ||
+            effectiveTriggerMode(rule) === "command"
           )
             return false;
           if (
@@ -5104,6 +5147,7 @@
           }
         for (const rule of controlRules()) {
           if (rule.enabled === false || !diagram.items?.[rule.equipmentId]) continue;
+          if (effectiveTriggerMode(rule) === "command") continue;
           const current = controlValue(rule.equipmentId, rule.variable),
             runtime = controlRuleRuntime.get(rule.id) || {},
             matched =
@@ -7177,18 +7221,99 @@
           ? (group.name || "Grupo elétrico") + " — grupo elétrico"
           : (o.name || "Sem TAG") + " — " + (topologyTypeNames[o.type] || o.type);
       }
-      function populateControlEquipmentSelects() {
-        const entries = Object.entries(diagram.items || {})
+      const conditionVariables = [
+        ["colorState", "Cor/condição elétrica"],
+        ["energized", "Energizado"],
+        ["state", "Estado do equipamento"],
+        ["maintenance", "Liberado para manutenção"],
+        ["voltageKV", "Tensão (kV)"],
+        ["currentA", "Corrente (A)"],
+        ["activePowerMW", "Potência ativa (MW)"],
+        ["reactivePowerMvar", "Potência reativa (MVAr)"],
+        ["apparentPowerMVA", "Potência aparente (MVA)"],
+        ["powerFactor", "Fator de potência"],
+        ["loadingPercent", "Carregamento (%)"],
+        ["overfluxPercent", "Sobrefluxo V/Hz (%)"],
+        ["frequencyHz", "Frequência (Hz)"],
+      ];
+      const conditionOperators = [
+        ["eq", "Igual a"], ["neq", "Diferente de"],
+        ["gt", "Maior que"], ["gte", "Maior ou igual"],
+        ["lt", "Menor que"], ["lte", "Menor ou igual"],
+      ];
+      function controlEquipmentEntries() {
+        return Object.entries(diagram.items || {})
           .filter(
             ([id, o]) =>
               isElectrical(o) &&
               (!o.conductorGroupId ||
                 conductorGroupRepresentative(o.conductorGroupId) === id),
           )
-          .sort(([, a], [, b]) => (a.name || "").localeCompare(b.name || "", "pt-BR"));
+          .sort(([, a], [, b]) =>
+            (a.name || "").localeCompare(b.name || "", "pt-BR"),
+          );
+      }
+      function addConditionRow(condition = {}) {
+        const row = document.createElement("div");
+        row.className = "condition-row";
+        const field = (title, control) => {
+          const label = document.createElement("label");
+          label.textContent = title;
+          label.append(control);
+          return label;
+        };
+        const equipment = document.createElement("select");
+        equipment.className = "condition-equipment";
+        equipment.innerHTML = '<option value="">Selecione</option>';
+        for (const [id, o] of controlEquipmentEntries()) {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = equipmentOptionLabel(id, o);
+          equipment.append(option);
+        }
+        equipment.value = condition.equipmentId || "";
+        const variable = document.createElement("select");
+        variable.className = "condition-variable";
+        for (const [value, name] of conditionVariables)
+          variable.add(new Option(name, value));
+        variable.value = condition.variable || "state";
+        const operator = document.createElement("select");
+        operator.className = "condition-operator";
+        for (const [value, name] of conditionOperators)
+          operator.add(new Option(name, value));
+        operator.value = condition.operator || "eq";
+        const value = document.createElement("input");
+        value.className = "condition-value";
+        value.placeholder = "Ex.: fechado ou 59.5";
+        value.value = condition.value ?? "";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "condition-remove";
+        remove.textContent = "Remover";
+        remove.onclick = () => row.remove();
+        row.append(
+          field("Equipamento", equipment),
+          field("Variável", variable),
+          field("Comparação", operator),
+          field("Valor", value),
+          remove,
+        );
+        $("#ruleConditions").append(row);
+      }
+      function readConditionRows() {
+        return [...$("#ruleConditions").querySelectorAll(".condition-row")].map(
+          (row) => ({
+            equipmentId: row.querySelector(".condition-equipment").value,
+            variable: row.querySelector(".condition-variable").value,
+            operator: row.querySelector(".condition-operator").value,
+            value: row.querySelector(".condition-value").value.trim(),
+          }),
+        );
+      }
+      function populateControlEquipmentSelects() {
+        const entries = controlEquipmentEntries();
         for (const select of [
           $("#ruleEquipment"),
-          $("#ruleConditionEquipment"),
           $("#ruleActionTarget"),
         ]) {
           const keep = select.value;
@@ -7213,19 +7338,26 @@
         }
       }
       function updateControlTriggerFields() {
-        const comparison = $("#ruleTriggerMode").value === "comparison";
-        $("#ruleFromLabel").hidden = comparison;
+        const mode = $("#ruleTriggerMode").value,
+          comparison = mode === "comparison",
+          command = mode === "command";
+        $("#ruleFromLabel").hidden = comparison || command;
         $("#ruleOperatorLabel").hidden = !comparison;
+        $("#ruleToLabel").hidden = command;
+        $("#ruleCommandLabel").hidden = !command;
         $("#ruleToLabel").firstChild.textContent = comparison
           ? "Valor limite"
           : "Novo valor";
-        $("#ruleFrom").required = !comparison;
+        $("#ruleFrom").required = !comparison && !command;
+        $("#ruleTo").required = !command;
         $("#ruleFrom").placeholder = comparison ? "" : "Ex.: vermelho";
         $("#ruleTo").placeholder = comparison ? "Ex.: 50" : "Ex.: preto";
         $("#controlValidation").classList.remove("invalid");
-        $("#controlValidation").textContent = comparison
-          ? "A lógica atua quando o valor cruza o limite e permanece na condição escolhida."
-          : "A lógica atua somente na mudança exata entre o valor anterior e o novo valor.";
+        $("#controlValidation").textContent = command
+          ? "A lógica será avaliada antes de executar o comando do operador."
+          : comparison
+            ? "A lógica atua quando o valor cruza o limite e permanece na condição escolhida."
+            : "A lógica atua somente na mudança exata entre o valor anterior e o novo valor.";
       }
       function blankControlRule() {
         selectedControlRule = null;
@@ -7242,6 +7374,9 @@
         $("#ruleTo").value = "black";
         $("#ruleMessage").value =
           "O equipamento perdeu a energização sem estar liberado para manutenção.";
+        $("#ruleConditions").innerHTML = "";
+        $("#ruleConditionLogic").value = "all";
+        $("#ruleCommandState").value = "any";
         updateControlTriggerFields();
         $("#controlValidation").classList.remove("invalid");
         $("#controlValidation").textContent =
@@ -7263,11 +7398,15 @@
         $("#ruleTo").value = rule.to ?? "";
         $("#ruleDelay").value = rule.delaySeconds ?? 0;
         $("#ruleIgnoreMaintenance").checked = rule.ignoreMaintenance !== false;
-        $("#ruleConditionEnabled").checked = !!rule.condition?.enabled;
-        $("#ruleConditionEquipment").value = rule.condition?.equipmentId || "";
-        $("#ruleConditionVariable").value = rule.condition?.variable || "state";
-        $("#ruleConditionOperator").value = rule.condition?.operator || "eq";
-        $("#ruleConditionValue").value = rule.condition?.value ?? "";
+        $("#ruleCommandState").value = rule.commandState || "any";
+        $("#ruleConditionLogic").value = rule.conditionLogic || "all";
+        $("#ruleConditions").innerHTML = "";
+        const conditions = Array.isArray(rule.conditions)
+          ? rule.conditions
+          : rule.condition?.enabled
+            ? [rule.condition]
+            : [];
+        conditions.forEach(addConditionRow);
         $("#ruleAlarm").checked = rule.alarm !== false;
         $("#ruleRegisterError").checked = rule.registerError !== false;
         $("#ruleBlockCommand").checked = !!rule.blockCommand;
@@ -7321,13 +7460,9 @@
           to: $("#ruleTo").value.trim(),
           delaySeconds: Math.max(0, +$("#ruleDelay").value || 0),
           ignoreMaintenance: $("#ruleIgnoreMaintenance").checked,
-          condition: {
-            enabled: $("#ruleConditionEnabled").checked,
-            equipmentId: $("#ruleConditionEquipment").value,
-            variable: $("#ruleConditionVariable").value,
-            operator: $("#ruleConditionOperator").value,
-            value: $("#ruleConditionValue").value.trim(),
-          },
+          commandState: $("#ruleCommandState").value,
+          conditionLogic: $("#ruleConditionLogic").value,
+          conditions: readConditionRows(),
           alarm: $("#ruleAlarm").checked,
           registerError: $("#ruleRegisterError").checked,
           blockCommand: $("#ruleBlockCommand").checked,
@@ -7340,16 +7475,22 @@
       function validateControlRule(rule) {
         if (!rule.name) return "Informe o nome da lógica.";
         if (!diagram.items?.[rule.equipmentId]) return "Selecione o equipamento monitorado.";
-        if (!rule.to) return "Informe o novo valor ou limite.";
+        if (rule.triggerMode !== "command" && !rule.to)
+          return "Informe o novo valor ou limite.";
         if (rule.triggerMode === "transition" && !rule.from)
           return "Informe o valor anterior da transição.";
-        if (rule.blockCommand && rule.triggerMode !== "comparison")
-          return "O bloqueio de comando deve usar o tipo de disparo Comparação/limite.";
         if (
-          rule.condition?.enabled &&
-          (!diagram.items?.[rule.condition.equipmentId] || !rule.condition.value)
+          rule.blockCommand &&
+          !["comparison", "command"].includes(rule.triggerMode)
         )
-          return "Complete o equipamento e o valor da condição adicional.";
+          return "O bloqueio deve usar Comparação/limite ou Tentativa de comando.";
+        if (
+          rule.conditions?.some(
+            (condition) =>
+              !diagram.items?.[condition.equipmentId] || !condition.value,
+          )
+        )
+          return "Complete todos os equipamentos e valores das condições.";
         if (!rule.alarm && !rule.actionTargetId && !rule.blockCommand)
           return "Escolha pelo menos uma ação: alarme ou comando automático.";
         if (rule.actionTargetId && !diagram.items?.[rule.actionTargetId])
@@ -7494,6 +7635,7 @@
       };
       $("#controlNew").onclick = blankControlRule;
       $("#ruleTriggerMode").onchange = updateControlTriggerFields;
+      $("#addRuleCondition").onclick = () => addConditionRow();
       $("#controlForm").onsubmit = (e) => {
         e.preventDefault();
         const rule = collectControlRule(),
@@ -7543,13 +7685,17 @@
         status.classList.toggle("invalid", !!issue);
         if (issue) return (status.textContent = issue);
         const matched =
-          (rule.triggerMode === "comparison"
-            ? compareRuleValue(current, rule.operator, rule.to)
-            : compareRuleValue(current, "eq", rule.to)) &&
+          (rule.triggerMode === "command"
+            ? true
+            : rule.triggerMode === "comparison"
+              ? compareRuleValue(current, rule.operator, rule.to)
+              : compareRuleValue(current, "eq", rule.to)) &&
           auxiliaryConditionMatches(rule);
         status.textContent =
-          "Teste sem atuação: valor atual = " +
-          String(current ?? "indisponível") +
+          "Teste sem atuação: " +
+          (rule.triggerMode === "command"
+            ? "comando = " + rule.commandState
+            : "valor atual = " + String(current ?? "indisponível")) +
           ". A condição " +
           (matched ? "está atendida" : "não está atendida") +
           ".";
@@ -7904,25 +8050,41 @@
             o.type === "load")
         )
           registerCommand();
-        const blockingRule = o && commandBlockingRule(equipmentId);
+        const attemptRules = o ? commandAttemptRules(equipmentId) : [],
+          blockingRule =
+            attemptRules.find((rule) => rule.blockCommand) ||
+            (o && commandBlockingRule(equipmentId));
         if (blockingRule) {
           pending = null;
           $("#cmd").close();
-          raiseAlarm(
-            equipmentId,
-            o,
-            blockingRule.message ||
-              "Comando bloqueado pelo intertravamento " + blockingRule.name + ".",
-            {
-              registerError: blockingRule.registerError !== false,
-              logicName: blockingRule.name,
-              priority: blockingRule.priority,
-            },
-          );
+          if (blockingRule.alarm !== false)
+            raiseAlarm(
+              equipmentId,
+              o,
+              blockingRule.message ||
+                "Comando bloqueado pelo intertravamento " + blockingRule.name + ".",
+              {
+                registerError: blockingRule.registerError !== false,
+                logicName: blockingRule.name,
+                priority: blockingRule.priority,
+              },
+            );
           $("#status").textContent =
             "COMANDO BLOQUEADO — " + blockingRule.name;
           return;
         }
+        for (const rule of attemptRules)
+          if (rule.alarm !== false)
+            raiseAlarm(
+              equipmentId,
+              o,
+              rule.message || "Condição de comando atuada: " + rule.name + ".",
+              {
+                registerError: rule.registerError !== false,
+                logicName: rule.name,
+                priority: rule.priority,
+              },
+            );
         if (o?.type === "load") {
           const active = o.state === "active";
           o.state = active ? "inactive" : "active";
