@@ -2498,8 +2498,16 @@
         "engineering/diagrams/" + safeDiagramId(id) + "/draft";
       const publishedPath = (id = currentDiagramId) =>
         "published/diagrams/" + safeDiagramId(id);
-      const cleanDiagram = (value = diagram) =>
-        JSON.parse(JSON.stringify(value || { name: "Novo diagrama", items: {} }));
+      const normalizeDiagram = (value) => {
+        const data = JSON.parse(
+          JSON.stringify(value || { name: "Novo diagrama", items: {} }),
+        );
+        if (!data.items || typeof data.items !== "object") data.items = {};
+        if (!Array.isArray(data.controlRules))
+          data.controlRules = Object.values(data.controlRules || {});
+        return data;
+      };
+      const cleanDiagram = (value = diagram) => normalizeDiagram(value);
       function diagramMetadata(id, data = diagram, extra = {}) {
         const old = diagramCatalog[id] || {};
         return {
@@ -2630,9 +2638,9 @@
             get(ref(db, publishedPath(id))),
           ]);
           diagram = draftSnapshot.exists()
-            ? draftSnapshot.val()
+            ? normalizeDiagram(draftSnapshot.val())
             : publishedSnapshot.exists()
-              ? publishedSnapshot.val()
+              ? normalizeDiagram(publishedSnapshot.val())
               : { name: diagramCatalog[id].name, items: {}, controlRules: [] };
           resetDiagramWorkspace();
           $("#status").textContent = "Diagrama aberto na engenharia: " + diagramCatalog[id].name;
@@ -2648,7 +2656,7 @@
           ref(db, path),
           (snapshot) => {
             if (eng) return;
-            if (snapshot.exists()) diagram = snapshot.val();
+            if (snapshot.exists()) diagram = normalizeDiagram(snapshot.val());
             else diagram = { name: diagramCatalog[id]?.name || "Diagrama", items: {} };
             resetControlRuleRuntime();
             if (operatorSession) applyScenarioSimulation();
@@ -6351,6 +6359,7 @@
       stage.onpointerdown = (e) => {
         if (!eng || e.target.closest(".item")) return;
         if (e.pointerType === "touch" && tool === "select") return;
+        if (!diagram.items || typeof diagram.items !== "object") diagram.items = {};
         let p = pt(e);
         if (tool === "line" || tool === "bus") p = snapConnection(p);
         if (tool === "select") {
@@ -7931,10 +7940,10 @@
             if ($("#operatorBox").open) $("#operatorBox").close();
             await ensureDiagramCatalog();
             const d = await get(ref(db, draftPath()));
-            if (d.exists()) diagram = d.val();
+            if (d.exists()) diagram = normalizeDiagram(d.val());
             else {
               const p = await get(ref(db, publishedPath()));
-              if (p.exists()) diagram = p.val();
+              if (p.exists()) diagram = normalizeDiagram(p.val());
             }
             resetDiagramWorkspace();
             $("#status").textContent = "Engenharia conectada";
