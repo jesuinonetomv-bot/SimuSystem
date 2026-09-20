@@ -1504,6 +1504,13 @@
               <b>↻</b>Girar 90°</button
             ><button class="tool" type="button" id="sendBack">
               <b>⇩</b>Enviar para trás
+            </button
+            ><button class="tool" type="button" id="groupConductors">
+              <b>⛓</b>Agrupar circuito</button
+            ><button class="tool" type="button" id="editConductorGroup">
+              <b>✎</b>Editar grupo</button
+            ><button class="tool" type="button" id="ungroupConductors">
+              <b>⛓</b>Desagrupar
             </button>
           </div>
           <span class="hint"
@@ -1601,6 +1608,40 @@
           <p id="diagramMessage" class="hint"></p>
         </form>
       </div>
+    </dialog>
+    <dialog id="conductorGroupBox" class="operator-login">
+      <form id="conductorGroupForm">
+        <h2>Grupo elétrico</h2>
+        <p>
+          Os barramentos e conexões selecionados serão tratados como um único
+          equipamento elétrico, mantendo o desenho de cada trecho.
+        </p>
+        <label>TAG / nome do grupo</label>
+        <input id="conductorGroupName" required maxlength="80" placeholder="Ex.: BARRA 13,8 kV — A" />
+        <label>Descrição</label>
+        <input id="conductorGroupDescription" maxlength="180" placeholder="Descrição opcional" />
+        <label class="source-check" style="margin-top:8px">
+          <input id="conductorGroupShowTag" type="checkbox" checked /> Mostrar TAG no diagrama
+        </label>
+        <label>Posição da TAG</label>
+        <select id="conductorGroupLabelPosition" style="width:100%;padding:9px;margin:4px 0 9px">
+          <option value="above">Acima</option>
+          <option value="below">Abaixo</option>
+          <option value="left">Esquerda</option>
+          <option value="right">Direita</option>
+        </select>
+        <label>Ajuste da TAG</label>
+        <div style="display:flex;gap:8px">
+          <input id="conductorGroupTagX" type="number" step="5" value="0" placeholder="X" />
+          <input id="conductorGroupTagY" type="number" step="5" value="0" placeholder="Y" />
+          <input id="conductorGroupFontSize" type="number" min="8" max="40" value="12" title="Tamanho da fonte" />
+        </div>
+        <p id="conductorGroupMessage" class="hint"></p>
+        <div class="actions">
+          <button type="button" id="conductorGroupCancel">Cancelar</button>
+          <button class="ok">Salvar grupo</button>
+        </div>
+      </form>
     </dialog>
     <dialog id="operatorBox" class="operator-login">
       <form id="operatorForm">
@@ -2468,6 +2509,8 @@
         controlRuleRuntime = new Map(),
         controlRuleTimers = new Map(),
         selectedControlRule = null,
+        editingConductorGroupId = null,
+        conductorGroupSelection = [],
         suppressAlarmUntil = 0,
         maintenance = JSON.parse(
           localStorage.getItem("simuMaintenance") || "{}",
@@ -2505,6 +2548,8 @@
         if (!data.items || typeof data.items !== "object") data.items = {};
         if (!Array.isArray(data.controlRules))
           data.controlRules = Object.values(data.controlRules || {});
+        if (!data.conductorGroups || typeof data.conductorGroups !== "object")
+          data.conductorGroups = {};
         return data;
       };
       const cleanDiagram = (value = diagram) => normalizeDiagram(value);
@@ -3122,6 +3167,12 @@
             topologyTargets(a).includes(idB) ||
             topologyTargets(b).includes(idA)
           );
+        if (
+          a?.conductorGroupId &&
+          b?.conductorGroupId &&
+          a.conductorGroupId === b.conductorGroupId
+        )
+          return true;
         return touching(a, b);
       }
       function topologyPoint(target, fromPoint, role) {
@@ -4563,7 +4614,7 @@
           for (let j = i + 1; j < entries.length; j++) {
             const [ka, a] = entries[i],
               [kb, b] = entries[j];
-            if (touching(a, b)) {
+            if (itemsConnected(ka, a, kb, b)) {
               graph.get(ka).push(kb);
               graph.get(kb).push(ka);
             }
@@ -4757,6 +4808,36 @@
               o.description,
             ),
           );
+      }
+      function conductorGroup(id) {
+        return id ? diagram.conductorGroups?.[id] || null : null;
+      }
+      function conductorGroupMembers(groupId) {
+        return Object.entries(diagram.items || {})
+          .filter(([, item]) => item.conductorGroupId === groupId)
+          .map(([id]) => id);
+      }
+      function conductorGroupRepresentative(groupId) {
+        return conductorGroupMembers(groupId)[0] || null;
+      }
+      function conductorGroupCenter(groupId) {
+        const points = conductorGroupMembers(groupId)
+          .flatMap((id) => terminals(diagram.items[id]));
+        if (!points.length) return { x: 0, y: 0 };
+        return {
+          x: (Math.min(...points.map((p) => p.x)) + Math.max(...points.map((p) => p.x))) / 2,
+          y: (Math.min(...points.map((p) => p.y)) + Math.max(...points.map((p) => p.y))) / 2,
+        };
+      }
+      function addConductorGroupLabels() {
+        for (const [groupId, group] of Object.entries(diagram.conductorGroups || {})) {
+          const members = conductorGroupMembers(groupId);
+          if (!members.length || group.showTag === false) continue;
+          const center = conductorGroupCenter(groupId),
+            holder = E("g", { class: "conductor-group-label", "data-group-id": groupId });
+          addLabels(holder, group, center.x, center.y, 18);
+          stage.append(holder);
+        }
       }
       function alarmCommand(o, message) {
         if (o.type === "breaker" || o.type === "disconnector")
@@ -5732,7 +5813,8 @@
                 class: o.type === "bus" ? "bus" : "wire",
               }),
             );
-            addLabels(g, o, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, 14);
+            if (!o.conductorGroupId)
+              addLabels(g, o, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, 14);
             g.append(
               E("rect", {
                 x: Math.min(o.x1, o.x2) - 9,
@@ -5769,6 +5851,7 @@
               class: "flow-segment",
             }),
           );
+        addConductorGroupLabels();
         monitorProtected(live, evaluateAlarm);
         evaluateControlRules(evaluateAlarm);
         if (start)
@@ -6199,10 +6282,15 @@
           return;
         }
         const additive =
-          multiSelectMode || e.ctrlKey || e.metaKey || e.shiftKey;
+          multiSelectMode || e.ctrlKey || e.metaKey || e.shiftKey,
+          selectionUnit = o.conductorGroupId
+            ? conductorGroupMembers(o.conductorGroupId)
+            : [k];
         if (additive) {
-          if (selectedIds.has(k)) selectedIds.delete(k);
-          else selectedIds.add(k);
+          const removeUnit = selectionUnit.every((id) => selectedIds.has(id));
+          for (const id of selectionUnit)
+            if (removeUnit) selectedIds.delete(id);
+            else selectedIds.add(id);
           selected = selectedIds.has(k)
             ? k
             : selectedIds.values().next().value || null;
@@ -6211,9 +6299,7 @@
             selectedIds.size + " objeto(s) selecionado(s)";
           return;
         }
-        if (!selectedIds.has(k)) {
-          selectedIds = new Set([k]);
-        }
+        if (!selectedIds.has(k)) selectedIds = new Set(selectionUnit);
         selected = k;
         draw();
         if (tool !== "select") return;
@@ -6346,7 +6432,13 @@
                 })
                 .map(([id]) => id);
             selectedIds = new Set(initial);
-            hits.forEach((id) => selectedIds.add(id));
+            hits.forEach((id) => {
+              const item = diagram.items[id],
+                unit = item?.conductorGroupId
+                  ? conductorGroupMembers(item.conductorGroupId)
+                  : [id];
+              unit.forEach((memberId) => selectedIds.add(memberId));
+            });
             selected = selectedIds.values().next().value || null;
             $("#status").textContent =
               selectedIds.size + " objeto(s) selecionado(s)";
@@ -6533,13 +6625,28 @@
       };
       function properties() {
         const count = selectedIds.size,
-          o = count === 1 && selected && diagram.items[selected];
+          o = count === 1 && selected && diagram.items[selected],
+          selectedGroupIds = [
+            ...new Set(
+              [...selectedIds]
+                .map((id) => diagram.items[id]?.conductorGroupId)
+                .filter(Boolean),
+            ),
+          ],
+          selectedGroup =
+            selectedGroupIds.length === 1
+              ? conductorGroup(selectedGroupIds[0])
+              : null;
         $("#fields").hidden = !o;
         $("#none").hidden = !!o;
         $("#none").textContent =
           count > 1
-            ? count +
-              " objetos selecionados — arraste um deles para mover o grupo"
+            ? selectedGroup
+              ? "Grupo elétrico: " +
+                (selectedGroup.name || "Sem TAG") +
+                " — " + count + " trechos"
+              : count +
+                " objetos selecionados — arraste um deles para mover o grupo"
             : "Selecione um componente";
         $("#topologyBtn").hidden = !(
           o && (o.type === "breaker" || o.type === "disconnector")
@@ -6823,9 +6930,12 @@
         line: "conexão",
       };
       function topologyLabel(id) {
-        const o = diagram.items[id];
+        const o = diagram.items[id],
+          group = conductorGroup(o?.conductorGroupId);
         return o
-          ? (o.name || "Sem TAG") + " — " + (topologyTypeNames[o.type] || o.type)
+          ? group
+            ? (group.name || "Grupo elétrico") + " — grupo de barramentos/conexões"
+            : (o.name || "Sem TAG") + " — " + (topologyTypeNames[o.type] || o.type)
           : "Equipamento inexistente";
       }
       function topologyIssue(o, role, aId, bId) {
@@ -6833,14 +6943,23 @@
         if (aId === bId) return "Os terminais A e B devem ligar equipamentos diferentes.";
         const a = diagram.items[aId],
           b = diagram.items[bId],
-          types = new Set([a?.type, b?.type]);
+          logicalType = (id, item) =>
+            item?.conductorGroupId &&
+            conductorGroupMembers(item.conductorGroupId).some(
+              (memberId) => diagram.items[memberId]?.type === "bus",
+            )
+              ? "bus"
+              : item?.type,
+          aType = logicalType(aId, a),
+          bType = logicalType(bId, b),
+          types = new Set([aType, bType]);
         if (!a || !b) return "Uma das referências não existe mais no diagrama.";
         if (
           (role === "transformer_primary" || role === "transformer_secondary") &&
           !types.has("transformer")
         )
           return "Esta função exige um transformador em um dos terminais.";
-        if (role === "bus_coupler" && (a.type !== "bus" || b.type !== "bus"))
+        if (role === "bus_coupler" && (aType !== "bus" || bType !== "bus"))
           return "A interligação exige um barramento em cada terminal.";
         if (role === "load_feeder" && !types.has("load") && !types.has("capacitor"))
           return "O alimentador exige uma carga ou banco de capacitores.";
@@ -6870,7 +6989,13 @@
         for (const select of [$("#topologyTerminalA"), $("#topologyTerminalB")]) {
           select.innerHTML = '<option value="">Selecione um equipamento</option>';
           Object.entries(diagram.items || {})
-            .filter(([id, item]) => id !== selected && isElectrical(item))
+            .filter(
+              ([id, item]) =>
+                id !== selected &&
+                isElectrical(item) &&
+                (!item.conductorGroupId ||
+                  conductorGroupRepresentative(item.conductorGroupId) === id),
+            )
             .sort(([, a], [, b]) => (a.name || "").localeCompare(b.name || "", "pt-BR"))
             .forEach(([id]) => {
               const option = document.createElement("option");
@@ -6949,11 +7074,19 @@
         );
       }
       function equipmentOptionLabel(id, o) {
-        return (o.name || "Sem TAG") + " — " + (topologyTypeNames[o.type] || o.type);
+        const group = conductorGroup(o?.conductorGroupId);
+        return group
+          ? (group.name || "Grupo elétrico") + " — grupo elétrico"
+          : (o.name || "Sem TAG") + " — " + (topologyTypeNames[o.type] || o.type);
       }
       function populateControlEquipmentSelects() {
         const entries = Object.entries(diagram.items || {})
-          .filter(([, o]) => isElectrical(o))
+          .filter(
+            ([id, o]) =>
+              isElectrical(o) &&
+              (!o.conductorGroupId ||
+                conductorGroupRepresentative(o.conductorGroupId) === id),
+          )
           .sort(([, a], [, b]) => (a.name || "").localeCompare(b.name || "", "pt-BR"));
         for (const select of [
           $("#ruleEquipment"),
@@ -7379,6 +7512,7 @@
           const o = structuredClone(original),
             k = newId();
           delete o.topology;
+          delete o.conductorGroupId;
           if (
             o.type === "breaker" ||
             o.type === "transformer" ||
@@ -7414,6 +7548,120 @@
           ? "Seleção múltipla ativa — toque nos objetos"
           : "Seleção múltipla concluída — arraste um objeto selecionado";
       };
+      function cleanupConductorGroups() {
+        diagram.conductorGroups ||= {};
+        for (const groupId of Object.keys(diagram.conductorGroups))
+          if (!conductorGroupMembers(groupId).length)
+            delete diagram.conductorGroups[groupId];
+      }
+      function selectedConductorMembers() {
+        const ids = (selectedIds.size ? [...selectedIds] : selected ? [selected] : [])
+          .filter((id) => diagram.items[id]);
+        return ids.every((id) => ["bus", "line"].includes(diagram.items[id].type))
+          ? ids
+          : [];
+      }
+      function conductorsAreContinuous(ids) {
+        if (ids.length < 2) return true;
+        const allowed = new Set(ids), seen = new Set([ids[0]]), queue = [ids[0]];
+        while (queue.length) {
+          const id = queue.shift();
+          for (const other of allowed)
+            if (!seen.has(other) && touching(diagram.items[id], diagram.items[other])) {
+              seen.add(other);
+              queue.push(other);
+            }
+        }
+        return seen.size === allowed.size;
+      }
+      function openConductorGroupEditor(groupId = null, members = []) {
+        editingConductorGroupId = groupId;
+        conductorGroupSelection = members;
+        const group = conductorGroup(groupId) || {};
+        $("#conductorGroupName").value = group.name || "Novo grupo elétrico";
+        $("#conductorGroupDescription").value = group.description || "";
+        $("#conductorGroupShowTag").checked = group.showTag !== false;
+        $("#conductorGroupLabelPosition").value = group.labelPosition || "above";
+        $("#conductorGroupTagX").value = group.tagX || 0;
+        $("#conductorGroupTagY").value = group.tagY || 0;
+        $("#conductorGroupFontSize").value = group.fontSize || 12;
+        $("#conductorGroupMessage").textContent = members.length + " trecho(s) no grupo.";
+        $("#conductorGroupBox").showModal();
+      }
+      $("#groupConductors").onclick = () => {
+        const ids = selectedConductorMembers();
+        if (ids.length < 2) {
+          $("#status").textContent =
+            "Selecione pelo menos dois barramentos ou conexões para agrupar";
+          return;
+        }
+        if (
+          !conductorsAreContinuous(ids) &&
+          !confirm(
+            "Os trechos selecionados não estão encostados. Ao agrupá-los, serão tratados como o mesmo ponto elétrico. Deseja continuar?",
+          )
+        )
+          return;
+        openConductorGroupEditor(null, ids);
+      };
+      $("#editConductorGroup").onclick = () => {
+        const ids = selectedIds.size ? [...selectedIds] : selected ? [selected] : [],
+          groupIds = [...new Set(ids.map((id) => diagram.items[id]?.conductorGroupId).filter(Boolean))];
+        if (groupIds.length !== 1) {
+          $("#status").textContent = "Selecione um trecho pertencente a um único grupo elétrico";
+          return;
+        }
+        openConductorGroupEditor(groupIds[0], conductorGroupMembers(groupIds[0]));
+      };
+      $("#ungroupConductors").onclick = () => {
+        const ids = selectedIds.size ? [...selectedIds] : selected ? [selected] : [],
+          groupIds = [...new Set(ids.map((id) => diagram.items[id]?.conductorGroupId).filter(Boolean))];
+        if (!groupIds.length) {
+          $("#status").textContent = "Nenhum grupo elétrico selecionado";
+          return;
+        }
+        pushHistory();
+        for (const groupId of groupIds) {
+          for (const memberId of conductorGroupMembers(groupId))
+            delete diagram.items[memberId].conductorGroupId;
+          delete diagram.conductorGroups[groupId];
+        }
+        local();
+        $("#status").textContent = groupIds.length + " grupo(s) desagrupado(s)";
+      };
+      $("#conductorGroupCancel").onclick = () => $("#conductorGroupBox").close();
+      $("#conductorGroupForm").onsubmit = (event) => {
+        event.preventDefault();
+        const name = $("#conductorGroupName").value.trim();
+        if (!name || !conductorGroupSelection.length) return;
+        pushHistory();
+        diagram.conductorGroups ||= {};
+        const groupId = editingConductorGroupId || newId(),
+          previousGroups = new Set(
+            conductorGroupSelection
+              .map((id) => diagram.items[id]?.conductorGroupId)
+              .filter((id) => id && id !== groupId),
+          );
+        for (const id of conductorGroupSelection)
+          if (diagram.items[id]) diagram.items[id].conductorGroupId = groupId;
+        diagram.conductorGroups[groupId] = {
+          id: groupId,
+          name,
+          description: $("#conductorGroupDescription").value.trim(),
+          showTag: $("#conductorGroupShowTag").checked,
+          labelPosition: $("#conductorGroupLabelPosition").value,
+          tagX: +$("#conductorGroupTagX").value || 0,
+          tagY: +$("#conductorGroupTagY").value || 0,
+          fontSize: Math.max(8, Math.min(40, +$("#conductorGroupFontSize").value || 12)),
+        };
+        for (const oldId of previousGroups)
+          if (!conductorGroupMembers(oldId).length) delete diagram.conductorGroups[oldId];
+        selectedIds = new Set(conductorGroupSelection);
+        selected = conductorGroupSelection[0] || null;
+        $("#conductorGroupBox").close();
+        local();
+        $("#status").textContent = "Grupo elétrico salvo: " + name;
+      };
       $("#copyBtn").onclick = copyObject;
       $("#pasteBtn").onclick = pasteObject;
       $("#undoBtn").onclick = undo;
@@ -7440,6 +7688,7 @@
           const ids = selectedIds.size ? [...selectedIds] : [selected];
           removeTopologyReferences(ids);
           for (const id of ids) delete diagram.items[id];
+          cleanupConductorGroups();
           selected = null;
           selectedIds.clear();
           local();
@@ -7521,6 +7770,7 @@
           pushHistory();
           removeTopologyReferences(ids);
           for (const id of ids) delete diagram.items[id];
+          cleanupConductorGroups();
           selected = null;
           selectedIds.clear();
           local();
