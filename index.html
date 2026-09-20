@@ -2021,9 +2021,9 @@
               <button type="button" id="addRuleCondition">+ Adicionar condição</button>
 
               <h3 class="control-section">Ações</h3>
-              <label class="control-check"><input id="ruleAlarm" type="checkbox" checked /> Gerar alarme</label>
-              <label class="control-check"><input id="ruleRegisterError" type="checkbox" checked /> Registrar como erro do operador</label>
-              <label class="control-check"><input id="ruleBlockCommand" type="checkbox" /> Bloquear comando no equipamento monitorado</label>
+              <h4 class="wide" style="margin:0">Alarme e registro</h4>
+              <label class="control-check"><input id="ruleAlarm" type="checkbox" checked /> Gerar alarme para o operador</label>
+              <label class="control-check"><input id="ruleRegisterError" type="checkbox" checked /> Registrar atuação como erro do operador</label>
               <label>Prioridade<select id="rulePriority">
                 <option value="critical">Crítica</option>
                 <option value="high" selected>Alta</option>
@@ -2031,6 +2031,14 @@
                 <option value="low">Baixa</option>
               </select></label>
               <label class="wide">Mensagem do alarme<textarea id="ruleMessage" rows="2" placeholder="Descreva a ocorrência"></textarea></label>
+
+              <h4 class="wide" style="margin:8px 0 0">Intertravamento</h4>
+              <label class="control-check wide"><input id="ruleBlockCommand" type="checkbox" /> BLOQUEAR a tentativa de comando no equipamento monitorado</label>
+              <p class="control-note wide" style="margin:0">
+                O bloqueio pode funcionar sozinho, sem alarme e sem comando automático. O operador receberá a mensagem “COMANDO BLOQUEADO”.
+              </p>
+
+              <h4 class="wide" style="margin:8px 0 0">Proteção ou comando automático</h4>
               <label>Equipamento comandado<select id="ruleActionTarget"><option value="">Nenhum comando automático</option></select></label>
               <label>Comando automático<select id="ruleActionState">
                 <option value="open">Abrir</option>
@@ -4893,8 +4901,7 @@
         if (/desenerg|perdeu/i.test(message)) return "DESENERGIZAÇÃO";
         return "ALARME";
       }
-      function raiseAlarm(k, o, message, options = {}) {
-        alarmTotal++;
+      function recordOperatorError(k, o, message, options = {}) {
         if (operatorSession && options.registerError !== false) {
           operatorSession.errors = (operatorSession.errors || 0) + 1;
           operatorSession.errorEvents = operatorSession.errorEvents || [];
@@ -4912,6 +4919,10 @@
           });
           persistOperatorSession();
         }
+      }
+      function raiseAlarm(k, o, message, options = {}) {
+        alarmTotal++;
+        recordOperatorError(k, o, message, options);
         $("#alarmCount").textContent = "Alarmes: " + alarmTotal;
         $("#alarmHead").textContent = options.logicName
           ? "⚠ ALARME DO CONTROL BUILDING"
@@ -5127,6 +5138,17 @@
             rule.message || "A lógica " + rule.name + " foi atuada.",
             {
               registerError: rule.registerError !== false,
+              logicName: rule.name,
+              priority: rule.priority,
+            },
+          );
+        else if (rule.registerError !== false)
+          recordOperatorError(
+            rule.equipmentId,
+            o,
+            rule.message || "A lógica " + rule.name + " foi atuada.",
+            {
+              registerError: true,
               logicName: rule.name,
               priority: rule.priority,
             },
@@ -7491,8 +7513,13 @@
           )
         )
           return "Complete todos os equipamentos e valores das condições.";
-        if (!rule.alarm && !rule.actionTargetId && !rule.blockCommand)
-          return "Escolha pelo menos uma ação: alarme ou comando automático.";
+        if (
+          !rule.alarm &&
+          !rule.registerError &&
+          !rule.actionTargetId &&
+          !rule.blockCommand
+        )
+          return "Escolha pelo menos uma ação: alarme, registro, bloqueio ou proteção/comando automático.";
         if (rule.actionTargetId && !diagram.items?.[rule.actionTargetId])
           return "Selecione um equipamento válido para o comando automático.";
         if (rule.actionTargetId) {
@@ -8069,6 +8096,18 @@
                 priority: blockingRule.priority,
               },
             );
+          else if (blockingRule.registerError !== false)
+            recordOperatorError(
+              equipmentId,
+              o,
+              blockingRule.message ||
+                "Comando bloqueado pelo intertravamento " + blockingRule.name + ".",
+              {
+                registerError: true,
+                logicName: blockingRule.name,
+                priority: blockingRule.priority,
+              },
+            );
           $("#status").textContent =
             "COMANDO BLOQUEADO — " + blockingRule.name;
           return;
@@ -8081,6 +8120,17 @@
               rule.message || "Condição de comando atuada: " + rule.name + ".",
               {
                 registerError: rule.registerError !== false,
+                logicName: rule.name,
+                priority: rule.priority,
+              },
+            );
+          else if (rule.registerError !== false)
+            recordOperatorError(
+              equipmentId,
+              o,
+              rule.message || "Condição de comando atuada: " + rule.name + ".",
+              {
+                registerError: true,
                 logicName: rule.name,
                 priority: rule.priority,
               },
