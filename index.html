@@ -1861,6 +1861,9 @@
               <option value="weak">Rede fraca</option>
             </select></label
           >
+          <label class="control-check" style="align-self:end">
+            <input id="distForceCurrent" type="checkbox" /> Fixar corrente informada
+          </label>
         </div>
         <div class="utility-disturbance-actions">
           <button type="button" id="distReset">Restaurar normal</button
@@ -3528,7 +3531,7 @@
             );
           if (Number.isFinite(+dist.frequencyHz))
             data.frequencyHz = Math.max(45, Math.min(65, +dist.frequencyHz));
-          if (Number.isFinite(+dist.currentA))
+          if (dist.forceCurrent === true && Number.isFinite(+dist.currentA))
             data.forcedCurrentA = Math.max(
               -10000,
               Math.min(10000, +dist.currentA),
@@ -3915,6 +3918,26 @@
                 )
               : 0;
           }
+          const effectiveLoadValues = (o) => {
+            const e = electricalData(o),
+              v = loadValues(o),
+              f0 = Math.max(1, +e.frequencyHz || 60),
+              fr = Math.max(0.5, frequency / f0),
+              vf = Math.max(0.05, gridState ? gridState.voltagePU : 1);
+            if (o.type === "capacitor")
+              return { p: 0, q: v.q * vf * vf * fr };
+            if (e.loadNature === "resistive")
+              return { p: v.p * vf * vf, q: 0 };
+            if (e.loadNature === "capacitive")
+              return {
+                p: v.p * vf * vf,
+                q: v.q * vf * vf * fr,
+              };
+            return {
+              p: v.p * Math.pow(vf, 1.2) * (1 + Math.abs(1 - fr) * 0.25),
+              q: (v.q * vf * vf) / Math.pow(fr, 1.5),
+            };
+          };
           function effectiveUtilityDispatch(k) {
             const e = electricalData(diagram.items[k]),
               d = utilityDispatch.get(k) || {
@@ -4161,7 +4184,7 @@
             let zp = 0,
               zqv = 0;
             for (const k of zoneLoads) {
-              const v = loadValues(diagram.items[k]);
+              const v = effectiveLoadValues(diagram.items[k]);
               zp += v.p;
               zqv += v.q;
             }
@@ -4331,23 +4354,10 @@
               loading = (apparent / rated) * 100;
               pf = apparent ? Math.abs(p) / apparent : 1;
             } else if (o.type === "load" || o.type === "capacitor") {
-              const v = loadValues(o),
-                f0 = Math.max(1, +e.frequencyHz || 60),
-                fr = Math.max(0.5, frequency / f0),
+              const v = effectiveLoadValues(o),
                 vf = Math.max(0.05, pu);
-              if (o.type === "capacitor") {
-                p = 0;
-                q = v.q * vf * vf * fr;
-              } else if (e.loadNature === "resistive") {
-                p = v.p * vf * vf;
-                q = 0;
-              } else if (e.loadNature === "capacitive") {
-                p = v.p * vf * vf;
-                q = v.q * vf * vf * fr;
-              } else {
-                p = v.p * Math.pow(vf, 1.2) * (1 + Math.abs(1 - fr) * 0.25);
-                q = (v.q * vf * vf) / Math.pow(fr, 1.5);
-              }
+              p = v.p;
+              q = v.q;
               const apparent = Math.hypot(p, q);
               pf = p ? Math.abs(p) / Math.max(0.001, apparent) : 0;
               current =
@@ -6206,6 +6216,7 @@
               -10000,
               Math.min(10000, +$("#distCurrent").value || 0),
             ),
+            forceCurrent: $("#distForceCurrent").checked,
             frequencyHz: Math.max(
               45,
               Math.min(65, +$("#distFrequency").value || 60),
@@ -6222,6 +6233,7 @@
           const r = electricalResults.get(k);
           $("#distVoltage").value = +e.nominalKV || 230;
           $("#distCurrent").value = r?.currentA || 0;
+          $("#distForceCurrent").checked = false;
           $("#distFrequency").value = +e.frequencyHz || 60;
           $("#distGridMode").value =
             e.gridMode === "weak" ? "weak" : "rigid";
@@ -6349,6 +6361,7 @@
             $("#distVoltage").value =
               dist?.voltageKV ?? (r?.voltageKV || e.nominalKV);
             $("#distCurrent").value = dist?.currentA ?? (r?.currentA || 0);
+            $("#distForceCurrent").checked = dist?.forceCurrent === true;
             $("#distFrequency").value =
               dist?.frequencyHz ?? (r?.frequencyHz || e.frequencyHz);
             $("#distGridMode").value = dist?.gridMode || e.gridMode || "rigid";
