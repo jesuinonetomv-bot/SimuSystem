@@ -1651,6 +1651,11 @@
         <input id="conductorGroupName" required maxlength="80" placeholder="Ex.: BARRA 13,8 kV — A" />
         <label>Descrição</label>
         <input id="conductorGroupDescription" maxlength="180" placeholder="Descrição opcional" />
+        <label>Código de continuidade entre telas</label>
+        <input id="conductorGroupGlobalCode" maxlength="80" placeholder="Ex.: BARRA-13K8-A" />
+        <p class="hint" style="margin:3px 0 8px">
+          Grupos de abas diferentes com o mesmo código serão tratados como o mesmo ponto elétrico.
+        </p>
         <label class="source-check" style="margin-top:8px">
           <input id="conductorGroupShowTag" type="checkbox" checked /> Mostrar TAG no diagrama
         </label>
@@ -2745,6 +2750,21 @@
         const saved = operatorDiagramStates.get(id);
         return saved ? normalizeDiagram(saved) : null;
       }
+      async function loadOperatorDiagramStates() {
+        if (!operatorSession) return;
+        const ids = Object.keys(diagramCatalog).filter(
+          (id) => diagramCatalog[id]?.operatorVisible !== false,
+        );
+        const snapshots = await Promise.all(
+          ids.map((id) => get(ref(db, publishedPath(id)))),
+        );
+        ids.forEach((id, index) => {
+          if (id === currentDiagramId)
+            operatorDiagramStates.set(id, cleanDiagram(diagram));
+          else if (snapshots[index].exists())
+            operatorDiagramStates.set(id, normalizeDiagram(snapshots[index].val()));
+        });
+      }
       async function switchDiagram(id) {
         id = safeDiagramId(id);
         if (
@@ -2936,6 +2956,7 @@
         };
         sessionToken = await auth.currentUser.getIdToken();
         resetControlRuleRuntime();
+        await loadOperatorDiagramStates();
         await persistOperatorSession();
         clearInterval(sessionTimer);
         sessionTimer = setInterval(persistOperatorSession, 15000);
@@ -5013,6 +5034,62 @@
           y: (Math.min(...points.map((p) => p.y)) + Math.max(...points.map((p) => p.y))) / 2,
         };
       }
+      function globalConnectorCode(group) {
+        return String(group?.globalConnectorCode || "")
+          .trim()
+          .toUpperCase()
+          .replace(/\s+/g, "-");
+      }
+      function globalSimulationDiagram() {
+        if (!operatorSession || operatorDiagramStates.size < 2) return null;
+        const states = new Map(operatorDiagramStates);
+        states.set(currentDiagramId, cleanDiagram(diagram));
+        const codes = new Map();
+        for (const [diagramId, data] of states)
+          for (const [groupId, group] of Object.entries(data.conductorGroups || {})) {
+            const code = globalConnectorCode(group);
+            if (!code) continue;
+            if (!codes.has(code)) codes.set(code, new Set());
+            codes.get(code).add(diagramId + ":" + groupId);
+          }
+        const activeCodes = new Set(
+          [...codes].filter(([, groups]) => groups.size > 1).map(([code]) => code),
+        );
+        if (!activeCodes.size) return null;
+        const merged = { name: diagram.name, items: {}, conductorGroups: {} };
+        let remoteIndex = 0;
+        for (const [diagramId, data] of states) {
+          const current = diagramId === currentDiagramId,
+            prefix = current ? "" : diagramId + "::",
+            offset = current ? 0 : ++remoteIndex * 100000,
+            groupIds = {};
+          for (const [groupId, group] of Object.entries(data.conductorGroups || {})) {
+            const code = globalConnectorCode(group);
+            groupIds[groupId] =
+              code && activeCodes.has(code)
+                ? "global::" + code
+                : prefix + "group::" + groupId;
+          }
+          for (const [itemId, source] of Object.entries(data.items || {})) {
+            const item = JSON.parse(JSON.stringify(source)),
+              id = prefix + itemId;
+            for (const key of ["x", "x1", "x2"]) if (Number.isFinite(+item[key])) item[key] = +item[key] + offset;
+            for (const key of ["y", "y1", "y2"]) if (Number.isFinite(+item[key])) item[key] = +item[key] + offset;
+            if (item.conductorGroupId)
+              item.conductorGroupId =
+                groupIds[item.conductorGroupId] || prefix + "group::" + item.conductorGroupId;
+            if (item.topology) {
+              item.topology = { ...item.topology };
+              if (item.topology.terminalA)
+                item.topology.terminalA = prefix + item.topology.terminalA;
+              if (item.topology.terminalB)
+                item.topology.terminalB = prefix + item.topology.terminalB;
+            }
+            merged.items[id] = item;
+          }
+        }
+        return merged;
+      }
       function addConductorGroupLabels() {
         for (const [groupId, group] of Object.entries(diagram.conductorGroups || {})) {
           const members = conductorGroupMembers(groupId);
@@ -5509,9 +5586,13 @@
       }
       function draw(evaluateAlarm = false) {
         stage.innerHTML = "";
-        const live = energyMap(),
+        const viewDiagram = diagram,
+          globalDiagram = globalSimulationDiagram(),
           flow = flowAnalysis();
+        if (globalDiagram) diagram = globalDiagram;
+        const live = energyMap();
         electricalResults = calculateElectricalState();
+        diagram = viewDiagram;
         monitorTransformerOverload(evaluateAlarm);
         monitorTransformerOverflux(evaluateAlarm);
         monitorGeneratorOverload(evaluateAlarm);
@@ -8019,6 +8100,7 @@
         const group = conductorGroup(groupId) || {};
         $("#conductorGroupName").value = group.name || "Novo grupo elétrico";
         $("#conductorGroupDescription").value = group.description || "";
+        $("#conductorGroupGlobalCode").value = group.globalConnectorCode || "";
         $("#conductorGroupShowTag").checked = group.showTag !== false;
         $("#conductorGroupLabelPosition").value = group.labelPosition || "above";
         $("#conductorGroupTagX").value = group.tagX || 0;
@@ -8087,6 +8169,9 @@
           id: groupId,
           name,
           description: $("#conductorGroupDescription").value.trim(),
+          globalConnectorCode: globalConnectorCode({
+            globalConnectorCode: $("#conductorGroupGlobalCode").value,
+          }),
           showTag: $("#conductorGroupShowTag").checked,
           labelPosition: $("#conductorGroupLabelPosition").value,
           tagX: +$("#conductorGroupTagX").value || 0,
@@ -8099,7 +8184,10 @@
         selected = conductorGroupSelection[0] || null;
         $("#conductorGroupBox").close();
         local();
-        $("#status").textContent = "Grupo elétrico salvo: " + name;
+        const code = diagram.conductorGroups[groupId].globalConnectorCode;
+        $("#status").textContent = code
+          ? "Grupo salvo com continuidade entre telas: " + code
+          : "Grupo elétrico salvo: " + name;
       };
       $("#copyBtn").onclick = copyObject;
       $("#pasteBtn").onclick = pasteObject;
