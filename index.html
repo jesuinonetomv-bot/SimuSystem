@@ -567,7 +567,11 @@
         position: sticky;
         top: 0;
         z-index: 5;
+        cursor: move;
+        touch-action: none;
       }
+      .faceplate.dragging { user-select: none; }
+      .fp-head button { cursor: pointer; }
       .fp-head h2 {
         margin: 2px 0 0;
         font-size: 19px;
@@ -1602,6 +1606,15 @@
         <div>
           <h3>Diagramas existentes</h3>
           <div class="diagram-list" id="diagramList"></div>
+          <div class="control-note" style="margin-top:12px">
+            <label class="source-check">
+              <input id="currentDiagramOperatorVisible" type="checkbox" checked />
+              Aba visível para o operador
+            </label>
+            <button type="button" id="diagramVisibilitySave" style="margin-top:8px">
+              Aplicar visibilidade
+            </button>
+          </div>
         </div>
         <form class="diagram-create" id="diagramCreateForm">
           <h3>Criar nova aba</h3>
@@ -1715,6 +1728,12 @@
           style="color: #24323d; background: #eef2f4"
         >
           Atualizar</button
+        ><button
+          class="top control-danger"
+          id="clearHistory"
+          style="color:#fff;background:#b8342b"
+        >
+          Limpar histórico</button
         ><button
           class="top"
           id="closeHistory"
@@ -2492,6 +2511,7 @@
         ref,
         get,
         set,
+        remove,
         onValue,
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
@@ -2586,13 +2606,20 @@
           createdAt: old.createdAt || extra.createdAt || Date.now(),
           updatedAt: Date.now(),
           publishedAt: extra.publishedAt ?? old.publishedAt ?? null,
+          operatorVisible:
+            extra.operatorVisible ?? old.operatorVisible ?? true,
         };
       }
       function renderDiagramCatalog() {
         const select = $("#diagramSelect"), list = $("#diagramList"),
-          entries = Object.entries(diagramCatalog).sort((a, b) =>
-            String(a[1].name || "").localeCompare(String(b[1].name || ""), "pt-BR"),
-          );
+          entries = Object.entries(diagramCatalog)
+            .filter(([, meta]) => eng || meta.operatorVisible !== false)
+            .sort((a, b) =>
+              String(a[1].name || "").localeCompare(
+                String(b[1].name || ""),
+                "pt-BR",
+              ),
+            );
         select.innerHTML = "";
         for (const [id, meta] of entries) {
           const option = document.createElement("option");
@@ -2602,8 +2629,10 @@
         }
         if (!entries.length) {
           const option = document.createElement("option");
-          option.value = "principal";
-          option.textContent = "Diagrama principal";
+          option.value = "";
+          option.textContent = eng
+            ? "Nenhum diagrama"
+            : "Nenhuma aba disponível";
           select.append(option);
         }
         if (diagramCatalog[currentDiagramId]) select.value = currentDiagramId;
@@ -2617,6 +2646,7 @@
           button.querySelector("strong").textContent = meta.name || "Diagrama sem nome";
           button.querySelector("small").textContent =
             (meta.publishedAt ? "Publicado" : "Somente rascunho") +
+            (meta.operatorVisible === false ? " · Oculto para operador" : "") +
             (meta.description ? " — " + meta.description : "");
           button.onclick = async () => {
             await switchDiagram(id);
@@ -2624,6 +2654,10 @@
           };
           list.append(button);
         }
+        const visibility = $("#currentDiagramOperatorVisible");
+        if (visibility)
+          visibility.checked =
+            diagramCatalog[currentDiagramId]?.operatorVisible !== false;
       }
       async function ensureDiagramCatalog() {
         const catalogSnapshot = await get(ref(db, "engineering/diagramCatalog"));
@@ -2677,11 +2711,16 @@
               }),
             };
         }
-        if (!diagramCatalog[currentDiagramId]) {
+        const visibleIds = Object.keys(diagramCatalog).filter(
+          (id) => diagramCatalog[id]?.operatorVisible !== false,
+        );
+        if (!visibleIds.includes(currentDiagramId)) {
           const preferred = await get(ref(db, "published/defaultDiagramId"));
           currentDiagramId =
-            (preferred.exists() && diagramCatalog[preferred.val()] && preferred.val()) ||
-            Object.keys(diagramCatalog)[0] || "principal";
+            (preferred.exists() &&
+              visibleIds.includes(preferred.val()) &&
+              preferred.val()) ||
+            visibleIds[0] || "";
         }
         renderDiagramCatalog();
       }
@@ -2698,7 +2737,12 @@
       }
       async function switchDiagram(id) {
         id = safeDiagramId(id);
-        if (!diagramCatalog[id] || id === currentDiagramId) return;
+        if (
+          !diagramCatalog[id] ||
+          id === currentDiagramId ||
+          (!eng && diagramCatalog[id].operatorVisible === false)
+        )
+          return;
         currentDiagramId = id;
         localStorage.setItem("simuDiagramId", id);
         if (operatorSession) {
@@ -2729,6 +2773,13 @@
       }
       function subscribePublishedDiagram(id = currentDiagramId) {
         if (publishedDiagramUnsubscribe) publishedDiagramUnsubscribe();
+        if (!id || diagramCatalog[id]?.operatorVisible === false) {
+          diagram = { name: "Nenhum diagrama disponível", items: {} };
+          resetDiagramWorkspace();
+          $("#status").textContent =
+            "Nenhuma aba foi disponibilizada para o operador";
+          return;
+        }
         const path = diagramCatalog[id] ? publishedPath(id) : "published/current";
         publishedDiagramUnsubscribe = onValue(
           ref(db, path),
@@ -3114,6 +3165,57 @@
           const q = p.matrixTransform(stage.getScreenCTM().inverse());
           return { x: snap(q.x), y: snap(q.y) };
         };
+      function enableFaceplateDrag(dialog) {
+        const handle = dialog?.querySelector(".fp-head");
+        if (!handle) return;
+        let drag = null;
+        handle.addEventListener("pointerdown", (event) => {
+          if (
+            eng ||
+            event.button !== 0 ||
+            event.target.closest("button,input,select,textarea,a")
+          )
+            return;
+          const rect = dialog.getBoundingClientRect();
+          dialog.style.position = "fixed";
+          dialog.style.margin = "0";
+          dialog.style.right = "auto";
+          dialog.style.bottom = "auto";
+          dialog.style.left = rect.left + "px";
+          dialog.style.top = rect.top + "px";
+          drag = {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+            pointerId: event.pointerId,
+          };
+          handle.setPointerCapture(event.pointerId);
+          dialog.classList.add("dragging");
+          event.preventDefault();
+        });
+        handle.addEventListener("pointermove", (event) => {
+          if (!drag || event.pointerId !== drag.pointerId) return;
+          const rect = dialog.getBoundingClientRect(),
+            left = Math.max(
+              4,
+              Math.min(window.innerWidth - rect.width - 4, event.clientX - drag.x),
+            ),
+            top = Math.max(
+              4,
+              Math.min(window.innerHeight - rect.height - 4, event.clientY - drag.y),
+            );
+          dialog.style.left = left + "px";
+          dialog.style.top = top + "px";
+        });
+        const finish = (event) => {
+          if (!drag || event.pointerId !== drag.pointerId) return;
+          drag = null;
+          dialog.classList.remove("dragging");
+        };
+        handle.addEventListener("pointerup", finish);
+        handle.addEventListener("pointercancel", finish);
+      }
+      enableFaceplateDrag($("#cmd"));
+      enableFaceplateDrag($("#busBox"));
       function terminals(o) {
         if (o.type === "breaker" || o.type === "disconnector") {
           const z = (o.scale || 1) * 22,
@@ -8388,6 +8490,33 @@
         $("#diagramBox").showModal();
       };
       $("#diagramClose").onclick = () => $("#diagramBox").close();
+      $("#diagramVisibilitySave").onclick = async () => {
+        const meta = diagramMetadata(currentDiagramId, diagram, {
+          operatorVisible: $("#currentDiagramOperatorVisible").checked,
+        });
+        try {
+          const writes = [
+            set(
+              ref(db, "engineering/diagramCatalog/" + currentDiagramId),
+              meta,
+            ),
+          ];
+          if (meta.publishedAt)
+            writes.push(
+              set(ref(db, "published/catalog/" + currentDiagramId), meta),
+            );
+          await Promise.all(writes);
+          diagramCatalog[currentDiagramId] = meta;
+          renderDiagramCatalog();
+          $("#diagramMessage").textContent = meta.operatorVisible
+            ? "Aba disponibilizada para o operador ✓"
+            : "Aba oculta para o operador e mantida na engenharia ✓";
+        } catch (error) {
+          $("#diagramMessage").textContent =
+            "Falha ao alterar visibilidade: " +
+            (error.code || error.message);
+        }
+      };
       $("#diagramRename").onclick = async () => {
         const name = $("#newDiagramName").value.trim();
         if (!name) {
@@ -8484,6 +8613,22 @@
         loadHistory();
       };
       $("#refreshHistory").onclick = loadHistory;
+      $("#clearHistory").onclick = async () => {
+        if (
+          !confirm(
+            "Excluir permanentemente todo o histórico de treinamento? Esta ação não pode ser desfeita.",
+          )
+        )
+          return;
+        try {
+          await remove(ref(db, "trainingSessions"));
+          await loadHistory();
+          $("#status").textContent = "Histórico de treinamento limpo ✓";
+        } catch (error) {
+          $("#historySummary").textContent =
+            "Não foi possível limpar o histórico. Verifique as permissões do Firebase.";
+        }
+      };
       $("#closeHistory").onclick = () => $("#historyBox").close();
       $("#closeErrorHistory").onclick = () => $("#errorHistoryBox").close();
       $("#login").onclick = async () => {
