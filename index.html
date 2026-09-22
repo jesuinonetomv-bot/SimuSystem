@@ -1323,6 +1323,7 @@
       ><button class="top" id="historyBtn" hidden>Histórico</button
       ><button class="top" id="controlBtn" hidden>Control Building</button
       ><button class="top" id="resetAlarms" hidden>Zerar alarmes</button
+      ><button class="top" id="resetOperatorDiagram" hidden>Resetar tela</button
       ><button class="top" id="save" hidden>Salvar rascunho</button
       ><button class="top publish" id="publish" hidden>Publicar esta aba</button
       ><button class="top publish" id="operatorLoginBtn">
@@ -1524,7 +1525,7 @@
               <b>⇩</b>Enviar para trás
             </button
             ><button class="tool" type="button" id="groupConductors">
-              <b>⛓</b>Agrupar circuito</button
+              <b>⛓</b>Mesclar barramentos</button
             ><button class="tool" type="button" id="editConductorGroup">
               <b>✎</b>Editar grupo</button
             ><button class="tool" type="button" id="ungroupConductors">
@@ -2568,6 +2569,7 @@
         diagram = { name: "Diagrama principal", items: {} },
         currentDiagramId = localStorage.getItem("simuDiagramId") || "principal",
         diagramCatalog = {},
+        operatorDiagramStates = new Map(),
         publishedDiagramUnsubscribe = null;
       $("#alarmCount").textContent = "Alarmes: " + alarmTotal;
       const gridDynamics = new GridDynamics();
@@ -2735,6 +2737,14 @@
         timeEngine.apply(diagram);
         draw(false);
       }
+      function saveOperatorDiagramState(id = currentDiagramId) {
+        if (!operatorSession || !id || !diagram?.items) return;
+        operatorDiagramStates.set(id, cleanDiagram(diagram));
+      }
+      function operatorDiagramState(id = currentDiagramId) {
+        const saved = operatorDiagramStates.get(id);
+        return saved ? normalizeDiagram(saved) : null;
+      }
       async function switchDiagram(id) {
         id = safeDiagramId(id);
         if (
@@ -2743,6 +2753,7 @@
           (!eng && diagramCatalog[id].operatorVisible === false)
         )
           return;
+        if (!eng && operatorSession) saveOperatorDiagramState(currentDiagramId);
         currentDiagramId = id;
         localStorage.setItem("simuDiagramId", id);
         if (operatorSession) {
@@ -2785,7 +2796,9 @@
           ref(db, path),
           (snapshot) => {
             if (eng) return;
-            if (snapshot.exists()) diagram = normalizeDiagram(snapshot.val());
+            const saved = operatorSession ? operatorDiagramState(id) : null;
+            if (saved) diagram = saved;
+            else if (snapshot.exists()) diagram = normalizeDiagram(snapshot.val());
             else diagram = { name: diagramCatalog[id]?.name || "Diagrama", items: {} };
             resetControlRuleRuntime();
             if (operatorSession) applyScenarioSimulation();
@@ -2901,6 +2914,7 @@
         if (!auth.currentUser?.isAnonymous)
           throw Error("Sessão anônima indisponível");
         alarmTotal = 0;
+        operatorDiagramStates.clear();
         $("#alarmCount").textContent = "Alarmes: 0";
         operatorSession = {
           id: Date.now() + "_" + crypto.randomUUID(),
@@ -2944,6 +2958,7 @@
         await persistOperatorSession();
         sessionStorage.removeItem("simuActiveSession");
         operatorSession = null;
+        operatorDiagramStates.clear();
         sessionToken = null;
         resetControlRuleRuntime();
         timeEngine.pause();
@@ -7974,9 +7989,16 @@
       function selectedConductorMembers() {
         const ids = (selectedIds.size ? [...selectedIds] : selected ? [selected] : [])
           .filter((id) => diagram.items[id]);
-        return ids.every((id) => ["bus", "line"].includes(diagram.items[id].type))
-          ? ids
-          : [];
+        if (!ids.every((id) => ["bus", "line"].includes(diagram.items[id].type)))
+          return [];
+        return [
+          ...new Set(
+            ids.flatMap((id) => {
+              const groupId = diagram.items[id]?.conductorGroupId;
+              return groupId ? conductorGroupMembers(groupId) : [id];
+            }),
+          ),
+        ];
       }
       function conductorsAreContinuous(ids) {
         if (ids.length < 2) return true;
@@ -8015,7 +8037,7 @@
         if (
           !conductorsAreContinuous(ids) &&
           !confirm(
-            "Os trechos selecionados não estão encostados. Ao agrupá-los, serão tratados como o mesmo ponto elétrico. Deseja continuar?",
+            "Os barramentos ou conexões selecionados não estão encostados. Ao mesclá-los, serão tratados como um único ponto elétrico, mesmo sem ligação gráfica contínua. Deseja continuar?",
           )
         )
           return;
@@ -8394,6 +8416,20 @@
         if ($("#alarmBox").open) $("#alarmBox").close();
         $("#status").textContent = "Contador de alarmes zerado";
       };
+      $("#resetOperatorDiagram").onclick = () => {
+        if (!operatorSession || eng) return;
+        const name = diagramCatalog[currentDiagramId]?.name || diagram.name || "esta tela";
+        if (
+          !confirm(
+            "Restaurar " + name + " ao estado originalmente publicado? As manobras realizadas nesta tela serão desfeitas.",
+          )
+        )
+          return;
+        operatorDiagramStates.delete(currentDiagramId);
+        resetControlRuleRuntime();
+        subscribePublishedDiagram(currentDiagramId);
+        $("#status").textContent = "Tela restaurada ao estado publicado — " + name;
+      };
       function updateTimeControls(state = timeEngine.snapshot()) {
         const allowed = eng || !!operatorSession;
         $("#simulationMode").value = state.mode;
@@ -8468,6 +8504,7 @@
           $("#resetAlarms").hidden =
             !on;
         $("#operatorLoginBtn").hidden = on || !!operatorSession;
+        $("#resetOperatorDiagram").hidden = on || !operatorSession;
         $("#diagramManage").hidden = !on;
         $("#login").textContent = on
           ? "Sair da engenharia"
