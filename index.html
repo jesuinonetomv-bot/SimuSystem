@@ -2743,7 +2743,7 @@
         draw(false);
       }
       function saveOperatorDiagramState(id = currentDiagramId) {
-        if (!operatorSession || !id || !diagram?.items) return;
+        if ((!operatorSession && !eng) || !id || !diagram?.items) return;
         operatorDiagramStates.set(id, cleanDiagram(diagram));
       }
       function operatorDiagramState(id = currentDiagramId) {
@@ -2765,6 +2765,23 @@
             operatorDiagramStates.set(id, normalizeDiagram(snapshots[index].val()));
         });
       }
+      async function loadEngineeringDiagramStates() {
+        if (!eng) return;
+        const ids = Object.keys(diagramCatalog);
+        const snapshots = await Promise.all(
+          ids.map(async (id) => {
+            const draft = await get(ref(db, draftPath(id)));
+            if (draft.exists()) return draft;
+            return get(ref(db, publishedPath(id)));
+          }),
+        );
+        ids.forEach((id, index) => {
+          if (id === currentDiagramId)
+            operatorDiagramStates.set(id, cleanDiagram(diagram));
+          else if (snapshots[index].exists())
+            operatorDiagramStates.set(id, normalizeDiagram(snapshots[index].val()));
+        });
+      }
       async function switchDiagram(id) {
         id = safeDiagramId(id);
         if (
@@ -2773,7 +2790,7 @@
           (!eng && diagramCatalog[id].operatorVisible === false)
         )
           return;
-        if (!eng && operatorSession) saveOperatorDiagramState(currentDiagramId);
+        if (eng || operatorSession) saveOperatorDiagramState(currentDiagramId);
         currentDiagramId = id;
         localStorage.setItem("simuDiagramId", id);
         if (operatorSession) {
@@ -2795,6 +2812,7 @@
             : publishedSnapshot.exists()
               ? normalizeDiagram(publishedSnapshot.val())
               : { name: diagramCatalog[id].name, items: {}, controlRules: [] };
+          operatorDiagramStates.set(id, cleanDiagram(diagram));
           resetDiagramWorkspace();
           $("#status").textContent = "Diagrama aberto na engenharia: " + diagramCatalog[id].name;
         } else {
@@ -2843,6 +2861,7 @@
           set(ref(db, "engineering/diagramCatalog/" + currentDiagramId), meta),
         ]);
         diagram = data;
+        operatorDiagramStates.set(currentDiagramId, cleanDiagram(data));
         diagramCatalog[currentDiagramId] = meta;
         localStorage.setItem("simuDraft:" + currentDiagramId, JSON.stringify(diagram));
         renderDiagramCatalog();
@@ -5041,7 +5060,7 @@
           .replace(/\s+/g, "-");
       }
       function globalSimulationDiagram() {
-        if (!operatorSession || operatorDiagramStates.size < 2) return null;
+        if ((!operatorSession && !eng) || operatorDiagramStates.size < 2) return null;
         const states = new Map(operatorDiagramStates);
         states.set(currentDiagramId, cleanDiagram(diagram));
         const codes = new Map();
@@ -7101,6 +7120,7 @@
       }
       function local() {
         localStorage.setItem("simuDraft:" + currentDiagramId, JSON.stringify(diagram));
+        if (eng) operatorDiagramStates.set(currentDiagramId, cleanDiagram(diagram));
         draw();
       }
       $("#name").onchange = (e) => {
@@ -8811,6 +8831,7 @@
               const p = await get(ref(db, publishedPath()));
               if (p.exists()) diagram = normalizeDiagram(p.val());
             }
+            await loadEngineeringDiagramStates();
             resetDiagramWorkspace();
             $("#status").textContent = "Engenharia conectada";
           } catch (e) {
