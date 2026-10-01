@@ -19,6 +19,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Node for validation
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate application and switching studies
+        run: |
+          npm run check
+          npm test
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload static site

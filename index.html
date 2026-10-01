@@ -1303,6 +1303,23 @@
         .diagram-manager-grid { grid-template-columns: 1fr; }
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
+      .switching-analysis {
+        margin: 0 9px 9px;
+        padding: 9px;
+        border: 1px solid #8da9b0;
+        border-left: 4px solid #43807a;
+        border-radius: 4px;
+        background: #f7fafb;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+      .switching-analysis[hidden] { display: none; }
+      .switching-analysis[data-kind="indeterminate"] { border-left-color: #b8342b; }
+      .switching-analysis[data-kind="source_parallel"],
+      .switching-analysis[data-kind="ring_without_impedance"] { border-left-color: #b37d16; }
+      .switching-analysis h3 { margin: 0 0 5px; font-size: 11px; color: #40545d; }
+      .switching-analysis p { margin: 5px 0; font-size: 12px; }
+      .switching-analysis small { display: block; font-size: 11px; margin-top: 5px; }
     </style>
   </head>
   <body>
@@ -1897,6 +1914,13 @@
           </button>
         </div>
       </div>
+      <section id="switchingAnalysis" class="switching-analysis" aria-live="polite" hidden>
+        <h3>ANÁLISE ELÉTRICA DO FECHAMENTO</h3>
+        <p id="switchingResult"></p>
+        <small id="switchingSources"></small>
+        <small id="switchingPath"></small>
+        <small id="switchingImpedance"></small>
+      </section>
       <div class="fp-warning" id="cmdText"></div>
       <div class="fp-actions">
         <button id="cmdCancel">Cancelar</button
@@ -2006,6 +2030,9 @@
                 <option value="energized">Energizado</option>
                 <option value="state">Estado do equipamento</option>
                 <option value="maintenance">Liberado para manutenção</option>
+                <option value="ringClosed">Anel fechado neste equipamento</option>
+                <option value="transformerParallel">Paralelismo de transformadores neste equipamento</option>
+                <option value="sourceParallel">Paralelismo de fontes neste equipamento</option>
                 <option value="voltageKV">Tensão (kV)</option>
                 <option value="currentA">Corrente (A)</option>
                 <option value="activePowerMW">Potência ativa (MW)</option>
@@ -2523,6 +2550,7 @@
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
       import { solveDiagramPowerFlow } from "./src/power-flow.js";
+      import { analyzeSwitching } from "./src/switching-analysis.js";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -5119,6 +5147,52 @@
           stage.append(holder);
         }
       }
+      function switchingAnalysisFor(equipmentId) {
+        return analyzeSwitching(globalSimulationDiagram() || diagram, equipmentId,
+          { terminals, electricalData });
+      }
+      function updateSwitchingPreview(equipmentId) {
+        const box = $("#switchingAnalysis"), o = diagram.items[equipmentId];
+        box.hidden = !o || !["breaker", "disconnector"].includes(o.type) ||
+          o.state === "closed";
+        if (box.hidden) return null;
+        const result = switchingAnalysisFor(equipmentId);
+        box.dataset.kind = result.type;
+        $("#switchingResult").textContent = result.label + ". " + result.message;
+        const sideText = (live, sources) => live === null ? "a verificar" :
+          live ? "energizado (" + sources.map((s) => s.name).join(", ") + ")" :
+            "desenergizado";
+        $("#switchingSources").textContent =
+          "Lado A: " + sideText(result.energizedA, result.sourcesA) + " | Lado B: " +
+          sideText(result.energizedB, result.sourcesB);
+        $("#switchingPath").textContent = result.components.length
+          ? "Caminho existente: " + result.components.map((c) => c.name).join(" → ")
+          : "";
+        const impedances = result.components.filter((c) => c.hasImpedance);
+        $("#switchingImpedance").textContent = impedances.length
+          ? "Impedâncias do modelo: " + impedances.map((c) =>
+              c.kind === "transformer"
+                ? c.name + ": Z=" + c.percent + "%"
+                : c.name + ": R=" + c.resistanceOhm + " Ω; X=" + c.reactanceOhm + " Ω"
+            ).join(" | ") +
+            (impedances.some((c) => c.modelDefault) ? " (inclui parâmetros padrão)" : "") +
+            (result.parallelTransformers.length
+              ? ". Compatibilidade de tensão, taps e grupo vetorial deve ser verificada."
+              : "")
+          : "";
+        return result;
+      }
+      function switchingControlValue(equipmentId, variable) {
+        const o = diagram.items[equipmentId];
+        if (!o || !["breaker", "disconnector"].includes(o.type)) return undefined;
+        if (o.state !== "closed") return false;
+        const result = switchingAnalysisFor(equipmentId);
+        if (result.type === "indeterminate") return undefined;
+        if (variable === "ringClosed") return result.ring;
+        if (variable === "transformerParallel")
+          return result.parallelTransformers.length > 0;
+        return result.requiresSynchronism;
+      }
       function alarmCommand(o, message) {
         if (o.type === "breaker" || o.type === "disconnector")
           return o.state === "open" ? "ABRIR" : "FECHAR";
@@ -5185,6 +5259,8 @@
         if (variable === "energized") return lastFlow.has(equipmentId);
         if (variable === "maintenance") return maint;
         if (variable === "state") return o.state || "";
+        if (["ringClosed", "transformerParallel", "sourceParallel"].includes(variable))
+          return switchingControlValue(equipmentId, variable);
         if (variable === "activePowerMW") return r?.activeMW;
         if (variable === "reactivePowerMvar") return r?.reactiveMvar;
         if (variable === "apparentPowerMVA")
@@ -5216,6 +5292,7 @@
         return aliases[text] || text;
       }
       function compareRuleValue(current, operator, expected) {
+        if (current === undefined || current === null) return false;
         const target = normalizedRuleValue(expected, current),
           a = typeof current === "string" ? current.toLowerCase() : current;
         if (operator === "eq") return a === target;
@@ -6220,6 +6297,7 @@
         addConductorGroupLabels();
         monitorProtected(live, evaluateAlarm);
         evaluateControlRules(evaluateAlarm);
+        if ($("#cmd").open && pending) updateSwitchingPreview(pending);
         if (start)
           stage.append(
             E("circle", { cx: start.x, cy: start.y, r: 6, fill: "#1976d2" }),
@@ -6473,6 +6551,7 @@
       function down(e, k) {
         e.stopPropagation();
         const o = diagram.items[k];
+        $("#switchingAnalysis").hidden = true;
         $("#utilityDisturbance").hidden = o.type !== "utility";
         if (!eng) {
           if (!operatorSession) {
@@ -6501,6 +6580,7 @@
                 (isCs ? "esta seccionadora?" : "este disjuntor?")
               : "Deseja fechar " +
                 (isCs ? "esta seccionadora?" : "este disjuntor?");
+            updateSwitchingPreview(k);
             $("#cmdOk").textContent = opening ? "ABRIR" : "FECHAR";
             $("#cmdOk").className =
               "fp-command " + (opening ? "open-command" : "close-command");
@@ -7458,6 +7538,9 @@
         energized: "Energizado",
         state: "Estado",
         maintenance: "Manutenção",
+        ringClosed: "Anel fechado",
+        transformerParallel: "Paralelismo de transformadores",
+        sourceParallel: "Paralelismo de fontes",
         voltageKV: "Tensão",
         currentA: "Corrente",
         activePowerMW: "Potência ativa",
@@ -7485,6 +7568,9 @@
         ["energized", "Energizado"],
         ["state", "Estado do equipamento"],
         ["maintenance", "Liberado para manutenção"],
+        ["ringClosed", "Anel fechado neste equipamento"],
+        ["transformerParallel", "Paralelismo de transformadores neste equipamento"],
+        ["sourceParallel", "Paralelismo de fontes neste equipamento"],
         ["voltageKV", "Tensão (kV)"],
         ["currentA", "Corrente (A)"],
         ["activePowerMW", "Potência ativa (MW)"],
@@ -8430,6 +8516,9 @@
           return;
         }
         const nextState = o?.state === "closed" ? "open" : "closed",
+          closingAnalysis = nextState === "closed" && o &&
+            ["breaker", "disconnector"].includes(o.type)
+              ? switchingAnalysisFor(equipmentId) : null,
           loadViolation =
             o?.type === "disconnector" && disconnectorUnderLoad(equipmentId),
           sequenceViolation =
@@ -8463,6 +8552,8 @@
             sequenceViolation.o,
             sequenceViolation.message,
           );
+        if (closingAnalysis && !loadViolation && !sequenceViolation && !$("#alarmBox").open)
+          $("#status").textContent = (o.name || "Equipamento") + " — " + closingAnalysis.label;
         if (protectionTrip)
           $("#status").textContent =
             "PROTEÇÃO ATUADA — transformador isolado por energização reversa";
