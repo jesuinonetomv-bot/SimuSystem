@@ -14,27 +14,45 @@ Abra `index.html` ou publique o repositório com GitHub Pages.
 
 > Uso exclusivo para treinamento. Não utilizar para operação em tempo real.
 
-## Análise de fechamento (v37)
+## Análise interna das manobras (v38)
 
-Ao selecionar um disjuntor ou uma seccionadora aberta como operador, a janela
-do comando mostra a análise elétrica prevista: energização, paralelismo de
-fontes, paralelismo de transformadores ou fechamento de anel. O caminho
-alternativo é procurado com o equipamento comandado aberto, respeitando os
-terminais explícitos, o estado dos demais disjuntores e os conectores entre
-telas. Transformadores mantêm terminais distintos de primário e secundário.
+A janela do operador mostra a confirmação do comando, sem relatório de
+caminhos, impedâncias ou identificadores internos. A análise ocorre ao
+confirmar cada manobra e considera os terminais, todos os disjuntores e os
+conectores entre telas. Transformadores mantêm terminais distintos de
+primário e secundário.
 
-A impedância utiliza Z% dos transformadores e R/X das linhas configuradas no
-modelo; valores padrão são identificados na janela. Impedâncias em bases
-diferentes não são somadas. Anel sem impedância significa ausência de
-impedância série no modelo. Impedância presente não comprova compatibilidade
-da manobra. O estudo não verifica diferença de fase, sequência de fases nem
-sincronismo, e não valida tensão, taps ou grupo vetorial para paralelismo.
+O fechamento de um anel energizado sem impedância gera alarme e registra a
+manobra no histórico de erros. O simulador calcula as aberturas que desfazem
+esse anel e preservam as cargas ativas. Essa condição gera alarme; ela não
+abre um disjuntor automaticamente. Um anel desenergizado não gera esse alarme.
+
+Na abertura, o simulador compara a alimentação de cada carga antes e depois
+do comando. A presença de um anel não libera todos os disjuntores: um
+alimentador fora do anel continua podendo interromper sua carga. A abertura
+do secundário de um transformador em paralelo pode transferir a alimentação
+para o outro transformador. Se uma manobra causar energização reversa de um
+transformador, a proteção do treinamento calcula e abre os disjuntores que
+isolam seu secundário, inclusive quando estão em outra tela. A detecção usa
+a alimentação independente de cada enrolamento, sem considerar o próprio
+transformador como uma fonte no outro lado.
+
+A impedância utiliza Z% dos transformadores e R/X cadastrados nas linhas.
+Uma conexão apenas desenhada não recebe impedância de transferência pelos
+valores genéricos de exibição. Impedâncias em bases diferentes não são
+somadas. Os cálculos de abertura verificam continuidade da alimentação e
+energização reversa; não substituem estudo de seletividade, fluxo de carga
+ou sincronismo. A presença de impedância não comprova compatibilidade de
+tensão, taps, fase ou grupo vetorial. Os monitoramentos de sobrecarga e as
+lógicas do Control Building continuam atuando.
 
 No Control Building estão disponíveis as variáveis booleanas **Anel fechado**,
 **Paralelismo de transformadores** e **Paralelismo de fontes** para disjuntores
 e seccionadoras. Use valor **sim**/**não** em comparação ou transição. Elas
-descrevem a ligação com o equipamento fechado. A análise, por si só, não cria
-alarme, erro ou bloqueio; essas ações continuam configuradas nas lógicas.
+descrevem a ligação com o equipamento fechado. Os alarmes de anel sem
+impedância, perda de alimentação de cargas e energização reversa não exigem
+criar uma lógica manual. Intertravamentos, condições de manutenção e
+inibições de alarme configuradas no Control Building são respeitados.
 
 Para validar sem instalar dependências:
 

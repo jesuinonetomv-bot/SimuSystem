@@ -12,11 +12,11 @@ new Script(withoutImports, { filename: "index.html" });
 for (const entry of code.matchAll(/from\s+["'](\.\/[^"']+)["']/g))
   assert.ok(existsSync(new URL(entry[1], root)), "Missing local import: " + entry[1]);
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
-for (const id of ["switchingAnalysis", "switchingResult", "switchingSources",
-  "switchingPath", "switchingImpedance"])
+for (const id of ["cmd", "cmdOk", "cmdText", "alarmBox", "alarmMessage"])
   assert.equal(ids.filter((x) => x === id).length, 1, "Duplicate/missing ID: " + id);
+assert.ok(!ids.includes("switchingAnalysis"), "Operator faceplate must not show the internal study");
 const sw = readFileSync(new URL("sw.js", root), "utf8");
 new Script(sw, { filename: "sw.js" });
-assert.ok(sw.includes('"./src/switching-analysis.js"'),
+assert.ok(sw.includes('"./src/switching-analysis.js?v=38"'),
   "Switching analysis must be in the offline asset list");
-console.log("Application syntax, module paths, analysis controls and offline asset list OK");
+console.log("Application syntax, module paths, command/alarm controls and offline asset list OK");

@@ -1303,23 +1303,6 @@
         .diagram-manager-grid { grid-template-columns: 1fr; }
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
-      .switching-analysis {
-        margin: 0 9px 9px;
-        padding: 9px;
-        border: 1px solid #8da9b0;
-        border-left: 4px solid #43807a;
-        border-radius: 4px;
-        background: #f7fafb;
-        line-height: 1.4;
-        overflow-wrap: anywhere;
-      }
-      .switching-analysis[hidden] { display: none; }
-      .switching-analysis[data-kind="indeterminate"] { border-left-color: #b8342b; }
-      .switching-analysis[data-kind="source_parallel"],
-      .switching-analysis[data-kind="ring_without_impedance"] { border-left-color: #b37d16; }
-      .switching-analysis h3 { margin: 0 0 5px; font-size: 11px; color: #40545d; }
-      .switching-analysis p { margin: 5px 0; font-size: 12px; }
-      .switching-analysis small { display: block; font-size: 11px; margin-top: 5px; }
     </style>
   </head>
   <body>
@@ -1914,13 +1897,6 @@
           </button>
         </div>
       </div>
-      <section id="switchingAnalysis" class="switching-analysis" aria-live="polite" hidden>
-        <h3>ANÁLISE ELÉTRICA DO FECHAMENTO</h3>
-        <p id="switchingResult"></p>
-        <small id="switchingSources"></small>
-        <small id="switchingPath"></small>
-        <small id="switchingImpedance"></small>
-      </section>
       <div class="fp-warning" id="cmdText"></div>
       <div class="fp-actions">
         <button id="cmdCancel">Cancelar</button
@@ -2550,7 +2526,7 @@
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
       import { solveDiagramPowerFlow } from "./src/power-flow.js";
-      import { analyzeSwitching } from "./src/switching-analysis.js";
+      import { createSwitchingStudy } from "./src/switching-analysis.js?v=38";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -3483,96 +3459,17 @@
           secondary: secondary || nearestBreaker(t[1], id),
         };
       }
-      function transformerSecondaryHasSource(id, closingSwitchId = null) {
-        const transformer = diagram.items[id];
-        if (!transformer) return false;
-        const secondaryPoint = terminals(transformer)[1],
-          entries = Object.entries(diagram.items || {}).filter(
-            ([k, o]) =>
-              k !== id &&
-              isElectrical(o) &&
-              !(
-                (o.type === "breaker" || o.type === "disconnector") &&
-                o.state !== "closed" &&
-                k !== closingSwitchId
-              ),
-          ),
-          graph = new Map(entries.map(([k]) => [k, []]));
-        for (let i = 0; i < entries.length; i++)
-          for (let j = i + 1; j < entries.length; j++)
-            if (
-              itemsConnected(
-                entries[i][0],
-                entries[i][1],
-                entries[j][0],
-                entries[j][1],
-              )
-            ) {
-              graph.get(entries[i][0]).push(entries[j][0]);
-              graph.get(entries[j][0]).push(entries[i][0]);
-            }
-        const mappedSecondary = transformerSwitches(id).secondary,
-          mappedItem = mappedSecondary && diagram.items[mappedSecondary],
-          queue =
-            mappedItem && hasExplicitTopology(mappedItem)
-              ? entries.some(([k]) => k === mappedSecondary)
-                ? [mappedSecondary]
-                : []
-              : entries
-                  .filter(([, o]) => touchesPoint(o, secondaryPoint))
-                  .map(([k]) => k),
-          seen = new Set(queue);
-        while (queue.length) {
-          const k = queue.shift(),
-            o = diagram.items[k];
-          if (
-            o?.isSource === true &&
-            o.state !== "stopped" &&
-            (o.type !== "turbogenerator" || o.state !== "stopped")
-          )
-            return true;
-          for (const next of graph.get(k) || [])
-            if (!seen.has(next)) {
-              seen.add(next);
-              queue.push(next);
-            }
-        }
-        return false;
-      }
-      function transformerSequenceViolation(breakerId, nextState) {
-        for (const [k, o] of Object.entries(diagram.items || {})) {
-          if (o.type !== "transformer") continue;
-          const s = transformerSwitches(k),
-            primary = s.primary && diagram.items[s.primary],
-            secondary = s.secondary && diagram.items[s.secondary];
-          if (
-            nextState === "open" &&
-            s.primary === breakerId &&
-            secondary?.state === "closed"
-          )
-            return {
-              k,
-              o,
-              secondaryId: s.secondary,
-              reverseSource: transformerSecondaryHasSource(k),
-              message:
-                "Sequência incorreta: abra primeiro o disjuntor do secundário e depois o disjuntor do primário.",
-            };
-          if (
-            nextState === "closed" &&
-            s.secondary === breakerId &&
-            primary?.state !== "closed"
-          )
-            return {
-              k,
-              o,
-              secondaryId: s.secondary,
-              reverseSource: transformerSecondaryHasSource(k, s.secondary),
-              message:
-                "Sequência incorreta: energize primeiro o primário e depois feche o disjuntor do secundário.",
-            };
-        }
-        return null;
+      function transformerSequenceViolation(command) {
+        if (!command?.reverseTransformers.length) return null;
+        const first = command.reverseTransformers[0];
+        return {
+          k: first.id,
+          o: command.network.items[first.id],
+          secondaryIds: [...new Set(command.reverseTransformers
+            .flatMap((transformer) => transformer.tripBreakers))],
+          message: "Energização reversa detectada em " +
+            command.reverseTransformers.map((transformer) => transformer.name).join(", ") + ".",
+        };
       }
       function disconnectorUnderLoad(id) {
         const sw = diagram.items[id];
@@ -4858,45 +4755,7 @@
         g.append(text);
       }
       function energyMap() {
-        const entries = Object.entries(diagram.items || {}).filter(([, o]) =>
-            isElectrical(o),
-          ),
-          graph = new Map(entries.map(([k]) => [k, []]));
-        for (let i = 0; i < entries.length; i++)
-          for (let j = i + 1; j < entries.length; j++) {
-            const [ka, a] = entries[i],
-              [kb, b] = entries[j];
-            if (itemsConnected(ka, a, kb, b)) {
-              graph.get(ka).push(kb);
-              graph.get(kb).push(ka);
-            }
-          }
-        const live = new Set(
-            entries.filter(([, o]) => o.isSource).map(([k]) => k),
-          ),
-          q = [...live];
-        while (q.length) {
-          const k = q.shift(),
-            o = diagram.items[k];
-          if (
-            (o.type === "breaker" || o.type === "disconnector") &&
-            o.state !== "closed"
-          )
-            continue;
-          for (const n of graph.get(k) || []) {
-            const no = diagram.items[n];
-            if (
-              (no.type === "breaker" || no.type === "disconnector") &&
-              no.state !== "closed"
-            )
-              continue;
-            if (!live.has(n)) {
-              live.add(n);
-              q.push(n);
-            }
-          }
-        }
-        return live;
+        return createSwitchingStudy(diagram, { terminals, electricalData }).energizedItems();
       }
       function projectPoint(p, a, b) {
         const dx = b.x - a.x,
@@ -5148,39 +5007,23 @@
         }
       }
       function switchingAnalysisFor(equipmentId) {
-        return analyzeSwitching(globalSimulationDiagram() || diagram, equipmentId,
-          { terminals, electricalData });
+        return switchingStudy().study.analyze(equipmentId);
       }
-      function updateSwitchingPreview(equipmentId) {
-        const box = $("#switchingAnalysis"), o = diagram.items[equipmentId];
-        box.hidden = !o || !["breaker", "disconnector"].includes(o.type) ||
-          o.state === "closed";
-        if (box.hidden) return null;
-        const result = switchingAnalysisFor(equipmentId);
-        box.dataset.kind = result.type;
-        $("#switchingResult").textContent = result.label + ". " + result.message;
-        const sideText = (live, sources) => live === null ? "a verificar" :
-          live ? "energizado (" + sources.map((s) => s.name).join(", ") + ")" :
-            "desenergizado";
-        $("#switchingSources").textContent =
-          "Lado A: " + sideText(result.energizedA, result.sourcesA) + " | Lado B: " +
-          sideText(result.energizedB, result.sourcesB);
-        $("#switchingPath").textContent = result.components.length
-          ? "Caminho existente: " + result.components.map((c) => c.name).join(" → ")
-          : "";
-        const impedances = result.components.filter((c) => c.hasImpedance);
-        $("#switchingImpedance").textContent = impedances.length
-          ? "Impedâncias do modelo: " + impedances.map((c) =>
-              c.kind === "transformer"
-                ? c.name + ": Z=" + c.percent + "%"
-                : c.name + ": R=" + c.resistanceOhm + " Ω; X=" + c.reactanceOhm + " Ω"
-            ).join(" | ") +
-            (impedances.some((c) => c.modelDefault) ? " (inclui parâmetros padrão)" : "") +
-            (result.parallelTransformers.length
-              ? ". Compatibilidade de tensão, taps e grupo vetorial deve ser verificada."
-              : "")
-          : "";
-        return result;
+      function switchingStudy() {
+        const network = globalSimulationDiagram() || diagram;
+        return { network, study: createSwitchingStudy(network, { terminals, electricalData }) };
+      }
+      function switchingCommandFor(equipmentId, nextState) {
+        const { network, study } = switchingStudy();
+        return { network, study, ...study.command(equipmentId, nextState) };
+      }
+      function ringAlarmMessage(command, equipmentId) {
+        const names = command.study.openingCandidates(equipmentId, { onlyIdeal: true })
+          .filter((candidate) => !maintenance[candidate.id]).map((candidate) => candidate.name);
+        return "Fechamento de anel sem impedância. " +
+          (names.length ? "Disjuntores calculados para desfazer o anel sem interromper as cargas: " +
+            names.slice(0, 4).join(", ") + (names.length > 4 ? " e outros." : ".") :
+            "Não foi encontrada uma abertura que desfaça o anel e mantenha as cargas alimentadas.");
       }
       function switchingControlValue(equipmentId, variable) {
         const o = diagram.items[equipmentId];
@@ -5360,7 +5203,16 @@
           : matches.every(Boolean);
       }
       function applyAutomaticCommand(targetId, nextState) {
-        const target = diagram.items?.[targetId];
+        let target = diagram.items?.[targetId];
+        if (!target) {
+          for (const [diagramId, state] of operatorDiagramStates) {
+            const prefix = diagramId + "::";
+            if (diagramId !== currentDiagramId && targetId.startsWith(prefix)) {
+              target = state.items?.[targetId.slice(prefix.length)];
+              if (target) break;
+            }
+          }
+        }
         if (!target || !nextState) return false;
         target.state = nextState;
         if (target.type === "utility" || target.type === "turbogenerator")
@@ -5680,7 +5532,7 @@
           else if (over) generatorOverloadState[k] = true;
         }
       }
-      function draw(evaluateAlarm = false) {
+      function draw(evaluateAlarm = false, skipSupplyAlarms = false) {
         stage.innerHTML = "";
         const viewDiagram = diagram,
           globalDiagram = globalSimulationDiagram(),
@@ -5688,6 +5540,13 @@
         if (globalDiagram) diagram = globalDiagram;
         const live = energyMap();
         electricalResults = calculateElectricalState();
+        for (const [id, result] of electricalResults)
+          if (!live.has(id)) {
+            result.energized = false;
+            for (const field of ["voltageKV", "voltagePrimaryKV", "voltageSecondaryKV",
+              "frequencyHz", "currentA", "activeMW", "reactiveMvar", "loadingPercent",
+              "overfluxPercent"]) result[field] = 0;
+          }
         diagram = viewDiagram;
         monitorTransformerOverload(evaluateAlarm);
         monitorTransformerOverflux(evaluateAlarm);
@@ -6295,9 +6154,8 @@
             }),
           );
         addConductorGroupLabels();
-        monitorProtected(live, evaluateAlarm);
+        monitorProtected(live, evaluateAlarm && !skipSupplyAlarms);
         evaluateControlRules(evaluateAlarm);
-        if ($("#cmd").open && pending) updateSwitchingPreview(pending);
         if (start)
           stage.append(
             E("circle", { cx: start.x, cy: start.y, r: 6, fill: "#1976d2" }),
@@ -6551,7 +6409,6 @@
       function down(e, k) {
         e.stopPropagation();
         const o = diagram.items[k];
-        $("#switchingAnalysis").hidden = true;
         $("#utilityDisturbance").hidden = o.type !== "utility";
         if (!eng) {
           if (!operatorSession) {
@@ -6580,7 +6437,6 @@
                 (isCs ? "esta seccionadora?" : "este disjuntor?")
               : "Deseja fechar " +
                 (isCs ? "esta seccionadora?" : "este disjuntor?");
-            updateSwitchingPreview(k);
             $("#cmdOk").textContent = opening ? "ABRIR" : "FECHAR";
             $("#cmdOk").className =
               "fp-command " + (opening ? "open-command" : "close-command");
@@ -8516,30 +8372,31 @@
           return;
         }
         const nextState = o?.state === "closed" ? "open" : "closed",
-          closingAnalysis = nextState === "closed" && o &&
+          switchingCommand = o &&
             ["breaker", "disconnector"].includes(o.type)
-              ? switchingAnalysisFor(equipmentId) : null,
+              ? switchingCommandFor(equipmentId, nextState) : null,
           loadViolation =
             o?.type === "disconnector" && disconnectorUnderLoad(equipmentId),
-          sequenceViolation =
-            o?.type === "breaker"
-              ? transformerSequenceViolation(equipmentId, nextState)
-              : null;
+          sequenceViolation = transformerSequenceViolation(switchingCommand),
+          ringViolation = nextState === "closed" &&
+            switchingCommand?.analysis.type === "ring_without_impedance",
+          lostLoads = (switchingCommand?.lostLoads || []).filter((load) =>
+            !maintenance[load.id] && !switchingCommand.network.items[load.id]?.inMaintenance &&
+            !controlRuleCoversTransition(load.id, "colorState", "red", "black"));
         if (o) o.state = nextState;
         let protectionTrip = false;
-        if (
-          sequenceViolation?.reverseSource &&
-          sequenceViolation.secondaryId &&
-          diagram.items[sequenceViolation.secondaryId]
-        ) {
-          diagram.items[sequenceViolation.secondaryId].state = "open";
-          protectionTrip = true;
-          sequenceViolation.message =
-            "Energização reversa do transformador detectada pelo lado secundário. A proteção atuou e abriu automaticamente o disjuntor secundário para isolar o equipamento.";
+        if (sequenceViolation) {
+          const opened = sequenceViolation.secondaryIds
+            .filter((id) => applyAutomaticCommand(id, "open"))
+            .map((id) => switchingCommand.network.items[id].name || "disjuntor secundário");
+          protectionTrip = opened.length > 0;
+          sequenceViolation.message += protectionTrip
+            ? " A proteção abriu " + opened.join(", ") + " para isolar o transformador."
+            : " Não foi possível isolar o secundário por um disjuntor. Verifique a topologia.";
         }
         pending = null;
         $("#cmd").close();
-        draw(!(loadViolation || sequenceViolation));
+        draw(true, !!(loadViolation || sequenceViolation || ringViolation || lostLoads.length));
         if (loadViolation)
           raiseAlarm(
             equipmentId,
@@ -8552,8 +8409,15 @@
             sequenceViolation.o,
             sequenceViolation.message,
           );
-        if (closingAnalysis && !loadViolation && !sequenceViolation && !$("#alarmBox").open)
-          $("#status").textContent = (o.name || "Equipamento") + " — " + closingAnalysis.label;
+        else if (ringViolation)
+          raiseAlarm(equipmentId, o, ringAlarmMessage(switchingCommand, equipmentId));
+        else if (lostLoads.length)
+          raiseAlarm(equipmentId, o, "A abertura interrompeu a alimentação de " +
+            lostLoads.map((load) => load.name).join(", ") +
+            ". O caminho alternativo não mantém essas cargas energizadas.");
+        else if (switchingCommand?.canOpenInRing && !$("#alarmBox").open)
+          $("#status").textContent = (o.name || "Disjuntor") +
+            " aberto — alimentação mantida pelo caminho alternativo";
         if (protectionTrip)
           $("#status").textContent =
             "PROTEÇÃO ATUADA — transformador isolado por energização reversa";

@@ -39,10 +39,16 @@ function impedance(o, data, fraction = 1) {
       percent, modelDefault: o.electrical?.impedancePercent == null };
   }
   if (o.type === "line") {
-    const known = finite(data.resistanceOhm) && finite(data.reactanceOhm) &&
-      Number(data.resistanceOhm) >= 0 && Number(data.reactanceOhm) >= 0;
-    const r = known ? Number(data.resistanceOhm) * fraction : null;
-    const x = known ? Number(data.reactanceOhm) * fraction : null;
+    // Drawing a connection does not configure a series impedance. Only use
+    // the line parameters saved by Engineering, never the display defaults.
+    const configuredR = Object.hasOwn(o.electrical || {}, "resistanceOhm");
+    const configuredX = Object.hasOwn(o.electrical || {}, "reactanceOhm");
+    const resistance = configuredR ? data.resistanceOhm : 0;
+    const reactance = configuredX ? data.reactanceOhm : 0;
+    const known = finite(resistance) && finite(reactance) &&
+      Number(resistance) >= 0 && Number(reactance) >= 0;
+    const r = known ? Number(resistance) * fraction : null;
+    const x = known ? Number(reactance) * fraction : null;
     return { known, hasImpedance: known && Math.hypot(r, x) > EPS,
       kind: "line", resistanceOhm: r, reactanceOhm: x,
       modelDefault: o.electrical?.resistanceOhm == null ||
@@ -50,8 +56,8 @@ function impedance(o, data, fraction = 1) {
   }
   return { known: true, hasImpedance: false, kind: "ideal" };
 }
-export function analyzeSwitching(diagram, switchId, options = {}) {
-  const items = diagram?.items || {}, sw = items[switchId];
+export function createSwitchingStudy(diagram, options = {}) {
+  const items = diagram?.items || {};
   const terminals = options.terminals || defaultTerminals;
   const electricalData = options.electricalData || defaultElectrical;
   const tolerance = options.tolerance ?? 20;
@@ -185,131 +191,229 @@ export function analyzeSwitching(diagram, switchId, options = {}) {
   }
   for (const [id, o] of entries) {
     const ps = ports.get(id);
-    if (!ps || ps.length !== 2 || id === switchId) continue;
-    if (o.type === "transformer" || (SWITCHES.has(o.type) && o.state === "closed"))
+    if (!ps || ps.length !== 2) continue;
+    if (o.type === "transformer" || SWITCHES.has(o.type))
       edge(ps[0], ps[1], id, impedance(o, electricalData(o)));
   }
-  const invalid = (message) => ({ type: "indeterminate", label: "Topologia a verificar",
-    message, ring: null, hasImpedance: null, parallelTransformers: [],
-    requiresSynchronism: false, path: [], components: [], sourcesA: [], sourcesB: [],
-    energizedA: null, energizedB: null, issues });
-  if (!sw || !SWITCHES.has(sw.type) || !ports.has(switchId))
-    return invalid("Selecione um disjuntor ou uma seccionadora com dois terminais válidos.");
-  const [start, end] = ports.get(switchId);
-  function walk(seed, accepts = () => true, extra = false) {
-    const seen = new Set([seed]), queue = [seed];
-    for (let i = 0; i < queue.length; i++) {
-      const key = queue[i];
-      const links = [...(adj.get(key) || [])];
-      if (extra && (key === start || key === end))
-        links.push({ to: key === start ? end : start, edge: { kind: "ideal" } });
-      for (const link of links)
-        if (accepts(link.edge) && !seen.has(link.to)) {
+  const conducts = (e, states = {}, excluded = null) =>
+    (excluded === null || e.id !== excluded) &&
+    (!SWITCHES.has(items[e.id]?.type) ||
+      (states[e.id] ?? items[e.id].state) === "closed");
+  function walk(seed, states = {}, accepts = () => true, excluded = null) {
+    const seeds = Array.isArray(seed) ? seed : [seed];
+    const seen = new Set(seeds.filter((key) => adj.has(key))), queue = [...seen];
+    for (let i = 0; i < queue.length; i++)
+      for (const link of adj.get(queue[i]) || [])
+        if (conducts(link.edge, states, excluded) && accepts(link.edge) &&
+            !seen.has(link.to)) {
           seen.add(link.to);
           queue.push(link.to);
         }
-    }
     return seen;
   }
-  const sideA = walk(start), sideB = walk(end);
-  const relevantIssues = issues.filter((x) => x.id === switchId ||
-    (ports.get(x.id) || []).some((key) => sideA.has(key) || sideB.has(key)));
-  if (relevantIssues.length)
-    return invalid(relevantIssues.map((x) => x.message).join(" "));
-  if (!adj.get(start)?.length || !adj.get(end)?.length)
-    return invalid("Um dos terminais está sem ligação elétrica. Configure os terminais A e B.");
-  const sourcesFor = (seen) => entries.filter(([id, o]) =>
-    ports.has(id) && o.state !== "stopped" && o.isSource !== false &&
-    (o.type === "utility" || o.type === "turbogenerator" || o.isSource === true) &&
+  const sourceEntries = entries.filter(([id, o]) => ports.has(id) &&
+    o.state !== "stopped" && o.isSource !== false &&
+    (o.type === "utility" || o.type === "turbogenerator" || o.isSource === true));
+  const sourcePorts = sourceEntries.flatMap(([id]) => ports.get(id));
+  const livePorts = (states = {}, excluded = null) =>
+    walk(sourcePorts, states, () => true, excluded);
+  const energizedItems = (states = {}) => {
+    const live = livePorts(states);
+    return new Set(entries.filter(([id, o]) => ports.has(id) &&
+      (!SWITCHES.has(o.type) || (states[id] ?? o.state) === "closed") &&
+      ports.get(id).some((key) => live.has(key))).map(([id]) => id));
+  };
+  const sourcesFor = (seen) => sourceEntries.filter(([id]) =>
     ports.get(id).some((key) => seen.has(key)))
     .map(([id, o]) => ({ id, name: o.name || id }));
-  const sourcesA = sourcesFor(sideA), sourcesB = sourcesFor(sideB);
-  const energizedA = sourcesA.length > 0, energizedB = sourcesB.length > 0;
-  function findPath(accepts) {
-    const parents = new Map([[start, null]]), queue = [start];
-    for (let i = 0; i < queue.length && !parents.has(end); i++)
-      for (const link of adj.get(queue[i]) || [])
-        if (accepts(link.edge) && !parents.has(link.to)) {
-          parents.set(link.to, { from: queue[i], edge: link.edge });
-          queue.push(link.to);
+  const issuesIn = (seen, id) => issues.filter((x) => x.id === id ||
+    (ports.get(x.id) || []).some((key) => seen.has(key)));
+  const transformers = entries.filter(([id, o]) =>
+    o.type === "transformer" && ports.has(id));
+
+  function analyze(switchId, states = {}) {
+    const sw = items[switchId];
+    const invalid = (message) => ({ type: "indeterminate", label: "Topologia a verificar",
+      message, ring: null, hasImpedance: null, parallelTransformers: [],
+      requiresSynchronism: false, path: [], components: [], sourcesA: [], sourcesB: [],
+      energizedA: null, energizedB: null, issues });
+    if (!sw || !SWITCHES.has(sw.type) || !ports.has(switchId))
+      return invalid("Selecione um disjuntor ou uma seccionadora com dois terminais válidos.");
+    const [start, end] = ports.get(switchId);
+    const before = { ...states, [switchId]: "open" };
+    const sideA = walk(start, before), sideB = walk(end, before);
+    const relevantIssues = issuesIn(new Set([...sideA, ...sideB]), switchId);
+    if (relevantIssues.length)
+      return invalid(relevantIssues.map((x) => x.message).join(" "));
+    if (!adj.get(start)?.some((link) => link.edge.id !== switchId) ||
+        !adj.get(end)?.some((link) => link.edge.id !== switchId))
+      return invalid("Um dos terminais está sem ligação elétrica. Configure os terminais A e B.");
+    const sourcesA = sourcesFor(sideA), sourcesB = sourcesFor(sideB);
+    const energizedA = sourcesA.length > 0, energizedB = sourcesB.length > 0;
+    function findPath(accepts) {
+      const parents = new Map([[start, null]]), queue = [start];
+      for (let i = 0; i < queue.length && !parents.has(end); i++)
+        for (const link of adj.get(queue[i]) || [])
+          if (conducts(link.edge, before) && accepts(link.edge) && !parents.has(link.to)) {
+            parents.set(link.to, { from: queue[i], edge: link.edge });
+            queue.push(link.to);
+          }
+      if (!parents.has(end)) return null;
+      const path = [];
+      for (let key = end; parents.get(key); key = parents.get(key).from)
+        path.unshift(parents.get(key).edge);
+      return path;
+    }
+    const idealPath = findPath((e) => e.known && !e.hasImpedance);
+    const path = idealPath || findPath(() => true);
+    const ring = path !== null, hasImpedance = ring
+      ? (path.some((e) => !e.known) ? null : path.some((e) => e.hasImpedance)) : null;
+    const noTransformers = (e) => e.kind !== "transformer";
+    const relevantTransformers = transformers.filter(([id]) =>
+      ports.get(id).some((key) => sideA.has(key) || sideB.has(key)));
+    // Parallel transformers need a common primary AND a common secondary.
+    // Two transformers merely present in series are not sufficient.
+    const regions = new Map(), afterRegions = new Map();
+    const region = (key, after = false) => {
+      const cache = after ? afterRegions : regions;
+      if (!cache.has(key)) {
+        const seen = walk(key, { ...states, [switchId]: after ? "closed" : "open" },
+          noTransformers);
+        for (const member of seen) cache.set(member, seen);
+      }
+      return cache.get(key);
+    };
+    const parallelTransformers = new Set();
+    for (let i = 0; i < relevantTransformers.length; i++) for (let j = i + 1; j < relevantTransformers.length; j++) {
+      const aId = relevantTransformers[i][0], bId = relevantTransformers[j][0];
+      const [aP, aS] = ports.get(aId), [bP, bS] = ports.get(bId);
+      const commonPrimary = region(aP).has(bP), commonSecondary = region(aS).has(bS);
+      if ((commonPrimary && !commonSecondary && region(aS, true).has(bS)) ||
+          (commonSecondary && !commonPrimary && region(aP, true).has(bP))) {
+        parallelTransformers.add(aId);
+        parallelTransformers.add(bId);
+      }
+    }
+    const result = { type: "", label: "", message: "", ring, hasImpedance,
+      energizedA, energizedB, sourcesA, sourcesB, requiresSynchronism: false,
+      parallelTransformers: [...parallelTransformers],
+      path: path ? [...new Set(path.map((e) => e.id).filter(Boolean))] : [],
+      components: [], issues: relevantIssues };
+    for (const id of result.path) {
+      const o = items[id], imp = impedance(o, electricalData(o));
+      result.components.push({ id, name: o.name || id, type: o.type, ...imp });
+    }
+    if (ring && !energizedA && !energizedB) {
+      result.type = "deenergized_ring";
+      result.label = "Fechamento de anel desenergizado";
+      result.message = "Há um caminho elétrico alternativo, mas nenhuma fonte está energizando os terminais.";
+    } else if (idealPath) {
+      result.type = "ring_without_impedance";
+      result.label = "Fechamento de anel sem impedância no modelo";
+      result.message = "Os terminais já estão interligados por um caminho sem impedância série. O fechamento acrescenta um caminho em paralelo.";
+    } else if (ring && hasImpedance === null) {
+      result.type = "ring_unknown_impedance";
+      result.label = "Fechamento de anel — impedância a verificar";
+      result.message = "Há um caminho elétrico alternativo, mas algum parâmetro de impedância está inválido.";
+    } else if (ring && parallelTransformers.size) {
+      result.type = "transformer_parallel";
+      result.label = "Paralelismo de transformadores";
+      result.message = "O fechamento une os lados de transformadores que passam a compartilhar primário e secundário. O anel contém impedâncias de transformadores.";
+    } else if (ring) {
+      result.type = "ring_with_impedance";
+      result.label = "Fechamento de anel com impedância";
+      result.message = "Há um caminho elétrico alternativo por transformadores ou linhas com impedância. A presença de impedância não confirma a compatibilidade da manobra.";
+    } else if (energizedA && energizedB) {
+      result.type = "source_parallel";
+      result.label = "Paralelismo de fontes";
+      result.message = "Os terminais pertencem a ilhas energizadas separadas. O fechamento une as fontes; o sincronismo ainda precisa ser verificado.";
+      result.requiresSynchronism = true;
+    } else if (energizedA || energizedB) {
+      result.type = "energization";
+      result.label = "Energização de trecho";
+      result.message = "Apenas um lado está energizado. O fechamento leva energia ao outro lado.";
+    } else {
+      result.type = "deenergized_connection";
+      result.label = "Interligação de trechos desenergizados";
+      result.message = "Nenhum dos dois lados tem uma fonte em operação.";
+    }
+    return result;
+  }
+
+  function firstBreakers(seed, states = {}) {
+    const queue = [seed], seen = new Set(queue), found = [];
+    for (let i = 0; i < queue.length; i++)
+      for (const link of adj.get(queue[i]) || []) {
+        if (items[link.edge.id]?.type === "transformer") continue;
+        if (items[link.edge.id]?.type === "breaker") {
+          if (!found.includes(link.edge.id)) found.push(link.edge.id);
+          continue;
         }
-    if (!parents.has(end)) return null;
-    const path = [];
-    for (let key = end; parents.get(key); key = parents.get(key).from)
-      path.unshift(parents.get(key).edge);
-    return path;
+        if (SWITCHES.has(items[link.edge.id]?.type) &&
+            (states[link.edge.id] ?? items[link.edge.id].state) !== "closed") continue;
+        if (!seen.has(link.to)) { seen.add(link.to); queue.push(link.to); }
+      }
+    return found;
   }
-  const idealPath = findPath((e) => e.known && !e.hasImpedance);
-  const path = idealPath || findPath(() => true);
-  const ring = path !== null, hasImpedance = ring
-    ? (path.some((e) => !e.known) ? null : path.some((e) => e.hasImpedance)) : null;
-  const noTransformers = (e) => e.kind !== "transformer";
-  const transformers = entries.filter(([id, o]) => o.type === "transformer" &&
-    ports.has(id) && ports.get(id).some((key) => sideA.has(key) || sideB.has(key)));
-  // Parallel transformers need a common primary AND a common secondary.
-  // Two transformers merely present in series are not sufficient.
-  const regions = new Map(), afterRegions = new Map();
-  const region = (key, after = false) => {
-    const cache = after ? afterRegions : regions;
-    if (!cache.has(key)) {
-      const seen = walk(key, noTransformers, after);
-      for (const member of seen) cache.set(member, seen);
+  function reverseTransformers(before, after, affected) {
+    const found = [];
+    for (const [id, o] of transformers) {
+      const [primary, secondary] = ports.get(id);
+      if (!affected.has(primary) && !affected.has(secondary)) continue;
+      // Exclude the winding itself: otherwise the secondary would falsely
+      // appear to be an independent source on the primary side.
+      const was = livePorts(before, id), next = livePorts(after, id);
+      if (next.has(primary) || !next.has(secondary) ||
+          (!was.has(primary) && was.has(secondary))) continue;
+      const candidates = firstBreakers(secondary, after)
+        .filter((k) => (after[k] ?? items[k].state) === "closed");
+      const single = candidates.find((k) =>
+        !livePorts({ ...after, [k]: "open" }, id).has(secondary));
+      const allOpen = Object.fromEntries(candidates.map((k) => [k, "open"]));
+      const tripBreakers = single ? [single] :
+        !livePorts({ ...after, ...allOpen }, id).has(secondary) ? candidates : [];
+      found.push({ id, name: o.name || "Transformador", tripBreakers });
     }
-    return cache.get(key);
-  };
-  const parallelTransformers = new Set();
-  for (let i = 0; i < transformers.length; i++) for (let j = i + 1; j < transformers.length; j++) {
-    const aId = transformers[i][0], bId = transformers[j][0];
-    const [aP, aS] = ports.get(aId), [bP, bS] = ports.get(bId);
-    const commonPrimary = region(aP).has(bP), commonSecondary = region(aS).has(bS);
-    if ((commonPrimary && !commonSecondary && region(aS, true).has(bS)) ||
-        (commonSecondary && !commonPrimary && region(aP, true).has(bP))) {
-      parallelTransformers.add(aId);
-      parallelTransformers.add(bId);
+    return found;
+  }
+  function command(switchId, nextState, states = {}) {
+    const sw = items[switchId], analysis = analyze(switchId, states);
+    if (!sw || !SWITCHES.has(sw.type) || !["open", "closed"].includes(nextState) ||
+        analysis.type === "indeterminate")
+      return { analysis, valid: false, canOpenInRing: null, lostLoads: [],
+        reverseTransformers: [], nextState };
+    const before = livePorts(states), afterStates = { ...states, [switchId]: nextState },
+      after = livePorts(afterStates), affected = walk(ports.get(switchId), states);
+    const lostLoads = entries.filter(([id, o]) => o.type === "load" &&
+      o.state === "active" && ports.has(id) && before.has(ports.get(id)[0]) &&
+      !after.has(ports.get(id)[0])).map(([id, o]) => ({ id, name: o.name || "Carga" }));
+    const reverse = reverseTransformers(states, afterStates, affected);
+    return { analysis, valid: true, nextState, lostLoads, reverseTransformers: reverse,
+      canOpenInRing: nextState === "open" && analysis.ring &&
+        !lostLoads.length && !reverse.length,
+      breaksRing: nextState === "open" && analysis.ring };
+  }
+  function openingCandidates(closingId, { onlyIdeal = false } = {}) {
+    const closed = { [closingId]: "closed" }, analysis = analyze(closingId);
+    if (!analysis.ring || analysis.type === "indeterminate") return [];
+    const affected = walk(ports.get(closingId), closed), candidates = [];
+    for (const [id, o] of entries) {
+      if (o.type !== "breaker" || (closed[id] ?? o.state) !== "closed" ||
+          o.inMaintenance || !ports.get(id)?.some((p) => affected.has(p))) continue;
+      const opening = command(id, "open", closed);
+      if (!opening.valid || !opening.canOpenInRing) continue;
+      if (id !== closingId) {
+        const remaining = analyze(closingId, { ...closed, [id]: "open" });
+        if (remaining.type === "indeterminate" ||
+            (onlyIdeal ? remaining.ring && remaining.hasImpedance !== true : remaining.ring))
+          continue;
+      }
+      candidates.push({ id, name: o.name || "Disjuntor sem TAG" });
     }
+    return candidates;
   }
-  const result = { type: "", label: "", message: "", ring, hasImpedance,
-    energizedA, energizedB, sourcesA, sourcesB, requiresSynchronism: false,
-    parallelTransformers: [...parallelTransformers],
-    path: path ? [...new Set(path.map((e) => e.id).filter(Boolean))] : [],
-    components: [], issues: relevantIssues };
-  for (const id of result.path) {
-    const o = items[id], imp = impedance(o, electricalData(o));
-    result.components.push({ id, name: o.name || id, type: o.type, ...imp });
-  }
-  if (ring && !energizedA && !energizedB) {
-    result.type = "deenergized_ring";
-    result.label = "Fechamento de anel desenergizado";
-    result.message = "Há um caminho elétrico alternativo, mas nenhuma fonte está energizando os terminais.";
-  } else if (idealPath) {
-    result.type = "ring_without_impedance";
-    result.label = "Fechamento de anel sem impedância no modelo";
-    result.message = "Os terminais já estão interligados por um caminho sem impedância série. O fechamento acrescenta um caminho em paralelo.";
-  } else if (ring && hasImpedance === null) {
-    result.type = "ring_unknown_impedance";
-    result.label = "Fechamento de anel — impedância a verificar";
-    result.message = "Há um caminho elétrico alternativo, mas algum parâmetro de impedância está inválido.";
-  } else if (ring && parallelTransformers.size) {
-    result.type = "transformer_parallel";
-    result.label = "Paralelismo de transformadores";
-    result.message = "O fechamento une os lados de transformadores que passam a compartilhar primário e secundário. O anel contém impedâncias de transformadores.";
-  } else if (ring) {
-    result.type = "ring_with_impedance";
-    result.label = "Fechamento de anel com impedância";
-    result.message = "Há um caminho elétrico alternativo por transformadores ou linhas com impedância. A presença de impedância não confirma a compatibilidade da manobra.";
-  } else if (energizedA && energizedB) {
-    result.type = "source_parallel";
-    result.label = "Paralelismo de fontes";
-    result.message = "Os terminais pertencem a ilhas energizadas separadas. O fechamento une as fontes; o sincronismo ainda precisa ser verificado.";
-    result.requiresSynchronism = true;
-  } else if (energizedA || energizedB) {
-    result.type = "energization";
-    result.label = "Energização de trecho";
-    result.message = "Apenas um lado está energizado. O fechamento leva energia ao outro lado.";
-  } else {
-    result.type = "deenergized_connection";
-    result.label = "Interligação de trechos desenergizados";
-    result.message = "Nenhum dos dois lados tem uma fonte em operação.";
-  }
-  return result;
+  return { analyze, command, openingCandidates, energizedItems };
+}
+export function analyzeSwitching(diagram, switchId, options = {}) {
+  return createSwitchingStudy(diagram, options).analyze(switchId);
 }
