@@ -409,6 +409,7 @@ function operationAdapter(initial, { remoteStates = [], rules = [], maint = {} }
   return new Function("initial", "remoteStates", "rules", "maint", "createSwitchingStudy",
     'let diagram=initial, operatorSession={errors:0}, eng=false, currentDiagramId="current";' +
     'let pending=null, suppressAlarmUntil=0, alarmTotal=0;' +
+    'const sessionTimeout={check:()=>true};' +
     'const operatorDiagramStates=new Map(remoteStates), maintenance=maint, calls={draws:[],commands:0};' +
     'const cleanDiagram=(value=diagram)=>JSON.parse(JSON.stringify(value));' +
     'const nodes=new Map(); const $=(id)=>{if(!nodes.has(id))nodes.set(id,' +

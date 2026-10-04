@@ -1318,6 +1318,7 @@
       <div class="brand">
         SimuSystem<small>Workspace de Engenharia e Operação</small>
       </div>
+      <button class="top" id="logout" hidden title="Encerrar sessão e voltar à visualização">Sair</button>
       <span class="mode" id="mode">Modo de visualização</span>
       <div class="diagram-switcher">
         <select id="diagramSelect" aria-label="Diagrama atual">
@@ -1691,6 +1692,7 @@
       <form id="operatorForm">
         <h2>Identificação do operador</h2>
         <p>Informe seus dados para iniciar uma nova sessão no simulador.</p>
+        <p class="hint">Use Sair para encerrar. Após 5 minutos em segundo plano, será necessário entrar novamente.</p>
         <div class="sim-guide">
           <strong>Como funciona o simulador</strong>
           <ul>
@@ -2536,6 +2538,7 @@
       import { solveDiagramPowerFlow } from "./src/power-flow.js";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=38";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=39";
+      import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -2583,6 +2586,8 @@
         sessionTimer = null,
         sessionToken = null,
         sessionWriteQueue = Promise.resolve(),
+        sessionClosing = false,
+        sessionExitNotice = "",
         undoStack = [],
         diagram = { name: "Diagrama principal", items: {} },
         currentDiagramId = localStorage.getItem("simuDiagramId") || "principal",
@@ -2963,8 +2968,11 @@
         return sessionWriteQueue;
       }
       async function startOperatorSession(name, registration) {
+        if (sessionClosing) throw Error("Encerramento de sessão em andamento");
         if (!auth.currentUser?.isAnonymous)
           throw Error("Sessão anônima indisponível");
+        sessionTimeout.reset();
+        sessionExitNotice = "";
         alarmTotal = 0;
         operatorDiagramStates.clear();
         $("#alarmCount").textContent = "Alarmes: 0";
@@ -2986,10 +2994,15 @@
           errorEvents: [],
           endedAt: null,
         };
-        sessionToken = await auth.currentUser.getIdToken();
+        const startingSession = operatorSession,
+          token = await auth.currentUser.getIdToken();
+        if (operatorSession !== startingSession) return;
+        sessionToken = token;
         resetControlRuleRuntime();
         await loadOperatorDiagramStates();
+        if (operatorSession !== startingSession) return;
         await persistOperatorSession();
+        if (operatorSession !== startingSession || !sessionTimeout.check()) return;
         clearInterval(sessionTimer);
         sessionTimer = setInterval(persistOperatorSession, 15000);
         $("#operatorLabel").hidden = false;
@@ -3004,12 +3017,16 @@
         operatorSession.commands++;
         persistOperatorSession();
       }
-      async function endOperatorSession() {
+      async function endOperatorSession(endedAt = Date.now()) {
         if (!operatorSession) return;
-        operatorSession.endedAt = Date.now();
+        operatorSession.endedAt = Math.max(operatorSession.startedAt, Math.min(Date.now(), endedAt));
+        const endingId = operatorSession.id;
         clearInterval(sessionTimer);
-        await persistOperatorSession();
-        sessionStorage.removeItem("simuActiveSession");
+        // Capture the final history record, then lock commands immediately.
+        // Firebase can leave writes pending while the device is offline.
+        let saving;
+        try { saving = persistOperatorSession(); }
+        catch (error) { saving = Promise.reject(error); }
         operatorSession = null;
         operatorDiagramStates.clear();
         sessionToken = null;
@@ -3020,7 +3037,49 @@
         if ($("#alarmBox").open) $("#alarmBox").close();
         $("#operatorLabel").hidden = true;
         setMode(false);
+        Promise.resolve(saving).then(() => {
+          const stored = JSON.parse(sessionStorage.getItem("simuActiveSession") || "null");
+          if (stored?.id === endingId) sessionStorage.removeItem("simuActiveSession");
+        }).catch(() => {});
       }
+      async function logoutSession(reason = "manual", endedAt = Date.now()) {
+        if (sessionClosing) return;
+        sessionClosing = true;
+        sessionTimeout.reset();
+        sessionExitNotice = reason === "background"
+          ? "Sessão encerrada após 5 minutos em segundo plano. Entre novamente."
+          : "Sessão encerrada — modo de visualização";
+        $("#logout").disabled = true;
+        try {
+          document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+          pending = null;
+          busPending = null;
+          $("#password").value = "";
+          $("#operatorForm").reset();
+          const ending = endOperatorSession(endedAt);
+          setMode(false);
+          timeEngine.pause();
+          alarmTotal = 0;
+          $("#alarmCount").textContent = "Alarmes: 0";
+          $("#status").textContent = sessionExitNotice;
+          await ending;
+          if (auth.currentUser && !auth.currentUser.isAnonymous) await signOut(auth);
+        } catch (error) {
+          $("#status").textContent = "Comandos bloqueados. Não foi possível concluir a saída; tente novamente.";
+          console.error("Falha ao encerrar sessão", error);
+        } finally {
+          sessionClosing = false;
+          $("#logout").disabled = false;
+        }
+      }
+      const sessionTimeout = attachSessionTimeout({
+        page: document,
+        ownerWindow: window,
+        storage: localStorage,
+        active: () => eng || !!operatorSession || !!(auth.currentUser && !auth.currentUser.isAnonymous)
+          || $("#loginBox").open || $("#operatorBox").open,
+        onExpire: (deadline) => { void logoutSession("background", deadline); },
+      });
       async function recoverPreviousSession(user) {
         const raw = sessionStorage.getItem("simuActiveSession");
         if (!raw) return;
@@ -3028,13 +3087,14 @@
           const old = JSON.parse(raw);
           if (old.operatorUid === user.uid && old.id) {
             const now = Date.now(),
+              endedAt = old.endedAt || Math.min(now, sessionTimeout.deadline() ?? now),
               data = {
                 ...old,
-                endedAt: now,
+                endedAt,
                 lastSeenAt: now,
                 durationSeconds: Math.max(
                   0,
-                  Math.round((now - old.startedAt) / 1000),
+                  Math.round((endedAt - old.startedAt) / 1000),
                 ),
                 active: false,
               };
@@ -3044,7 +3104,7 @@
               data,
             );
           }
-        } catch (e) {}
+        } catch (e) { return; }
         sessionStorage.removeItem("simuActiveSession");
       }
       function saveSessionOnExit() {
@@ -8277,6 +8337,7 @@
         }
       };
       $("#cmdOk").onclick = () => {
+        if (!operatorSession || !pending || !sessionTimeout.check()) return;
         const equipmentId = pending,
           o = diagram.items[equipmentId];
         if (
@@ -8578,11 +8639,11 @@
           $("#resetAlarms").hidden =
             !on;
         $("#operatorLoginBtn").hidden = on || !!operatorSession;
+        $("#logout").hidden = !(on || operatorSession || (auth.currentUser && !auth.currentUser.isAnonymous));
         $("#resetOperatorDiagram").hidden = on || !operatorSession;
         $("#diagramManage").hidden = !on;
-        $("#login").textContent = on
-          ? "Sair da engenharia"
-          : "Entrar como administrador";
+        $("#login").hidden = on;
+        $("#login").textContent = "Entrar como administrador";
         $("#operatorLabel").hidden = on || !operatorSession;
         selected = null;
         selectedIds.clear();
@@ -8695,6 +8756,8 @@
         }
       };
       $("#operatorLoginBtn").onclick = () => {
+        if (sessionClosing) return;
+        sessionTimeout.reset();
         if (!$("#operatorBox").open) $("#operatorBox").showModal();
       };
       $("#operatorCancel").onclick = () => {
@@ -8744,15 +8807,15 @@
       $("#closeErrorHistory").onclick = () => $("#errorHistoryBox").close();
       $("#login").onclick = async () => {
         if (eng) {
-          alarmTotal = 0;
-          $("#alarmCount").textContent = "Alarmes: 0";
-          if ($("#alarmBox").open) $("#alarmBox").close();
-          await signOut(auth);
+          await logoutSession();
         } else {
+          if (sessionClosing) return;
+          sessionTimeout.reset();
           await endOperatorSession();
           $("#loginBox").showModal();
         }
       };
+      $("#logout").onclick = () => logoutSession();
       $("#loginCancel").onclick = () => {
         $("#loginBox").close();
         setMode(false);
@@ -8762,6 +8825,9 @@
       };
       $("#loginForm").onsubmit = async (e) => {
         e.preventDefault();
+        if (sessionClosing) return;
+        sessionTimeout.reset();
+        sessionExitNotice = "";
         try {
           await endOperatorSession();
           await signInWithEmailAndPassword(
@@ -8774,18 +8840,21 @@
         }
       };
       onAuthStateChanged(auth, async (user) => {
+        if (user && !user.isAnonymous && !sessionTimeout.check()) return;
         if (user?.isAnonymous) {
           await recoverPreviousSession(user);
+          sessionTimeout.reset();
           setMode(false);
           await loadPublishedCatalog();
           subscribePublishedDiagram(currentDiagramId);
-          $("#status").textContent =
+          $("#status").textContent = sessionExitNotice ||
             "Modo de visualização — comandos bloqueados";
           return;
         }
         if (user) {
           try {
             const role = await get(ref(db, "admins/" + user.uid));
+            if (auth.currentUser?.uid !== user.uid || sessionClosing) return;
             if (role.val() !== true) throw Error();
             setMode(true);
             $("#loginBox").close();

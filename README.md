@@ -21,6 +21,21 @@ e as funções de operador e administrador. Precisa de internet e recebe as
 atualizações do site automaticamente. Código, requisitos e instruções de
 compilação estão em [android/README.md](android/README.md).
 
+## Saída e segundo plano (v40)
+
+O botão **Sair** encerra a sessão de operador ou administrador e retorna à
+visualização, com os comandos bloqueados. As janelas abertas e a senha
+digitada são fechadas/limpas. Após **5 minutos em segundo plano**, a sessão
+também é encerrada. O retorno verifica a hora de saída mesmo se o Android
+tiver suspendido os temporizadores. A política também vale para uma aba do
+site deixada em segundo plano e para os formulários de entrada.
+
+O encerramento bloqueia a operação antes de aguardar a gravação do histórico.
+O registro final fica na fila do Firebase e sua cópia local é mantida até a
+confirmação. Uma sessão anterior recuperada respeita o horário de encerramento
+e o limite de segundo plano. O botão e a expiração chegam ao APK existente
+pela atualização do site.
+
 ## Toque, seleção e movimento (v39)
 
 Na operação, o faceplate abre ao soltar um clique ou toque sem arraste.
