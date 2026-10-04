@@ -19,4 +19,6 @@ const sw = readFileSync(new URL("sw.js", root), "utf8");
 new Script(sw, { filename: "sw.js" });
 assert.ok(sw.includes('"./src/switching-analysis.js?v=38"'),
   "Switching analysis must be in the offline asset list");
+assert.ok(sw.includes('"./src/diagram-gestures.js?v=39"'),
+  "Diagram gestures must be in the offline asset list");
 console.log("Application syntax, module paths, command/alarm controls and offline asset list OK");

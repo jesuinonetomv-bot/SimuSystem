@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/switching-analysis.js && node scripts/check-index.mjs",
-    "test": "node --test tests/switching-analysis.test.mjs"
+    "check": "node --check src/switching-analysis.js && node --check src/diagram-gestures.js && node scripts/check-index.mjs",
+    "test": "node --test tests/*.test.mjs"
   }
 }

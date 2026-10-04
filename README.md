@@ -21,6 +21,16 @@ e as funções de operador e administrador. Precisa de internet e recebe as
 atualizações do site automaticamente. Código, requisitos e instruções de
 compilação estão em [android/README.md](android/README.md).
 
+## Toque, seleção e movimento (v39)
+
+Na operação, o faceplate abre ao soltar um clique ou toque sem arraste.
+Pequenas oscilações do dedo são toleradas. Arrastar com o mouse move a tela;
+no celular permanece a rolagem pelo dedo. Arraste, rolagem, cancelamento do
+gesto e zoom com dois dedos não abrem faceplate. O reconhecimento usa pixels
+da tela, independentemente do zoom do diagrama, e acompanha as atualizações
+das medições sem perder o equipamento tocado. A edição dos componentes pelo
+administrador mantém seus controles de seleção e movimentação.
+
 ## Análise interna das manobras (v38)
 
 A janela do operador mostra a confirmação do comando, sem relatório de

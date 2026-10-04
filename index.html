@@ -152,6 +152,14 @@
       .item {
         cursor: pointer;
       }
+      .workspace:not(.eng) .stage {
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .wrap.panning,
+      .wrap.panning * {
+        cursor: grabbing;
+      }
       .eng .item {
         cursor: move;
         touch-action: none;
@@ -2527,6 +2535,7 @@
       import { GridDynamics } from "./src/grid-dynamics.js";
       import { solveDiagramPowerFlow } from "./src/power-flow.js";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=38";
+      import { attachDiagramGestures } from "./src/diagram-gestures.js?v=39";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -6140,7 +6149,9 @@
             for (const p of terminals(o))
               g.append(E("circle", { cx: p.x, cy: p.y, r: 5, class: "port" }));
           addMeasurement(g, k, o);
-          g.onpointerdown = (e) => down(e, k);
+          g.onpointerdown = (e) => {
+            if (eng) down(e, k);
+          };
           stage.append(g);
         }
         for (const f of flow.segments)
@@ -8846,6 +8857,13 @@
       );
       let viewZoom = 1;
       const wrap = document.querySelector(".wrap");
+      const diagramGestures = attachDiagramGestures({
+        viewport: wrap,
+        enabled: () => !eng,
+        onTap: (event, id) => {
+          if (diagram.items[id]) down(event, id);
+        },
+      });
       function setZoom(next, clientX, clientY) {
         const old = viewZoom,
           rect = wrap.getBoundingClientRect(),
@@ -8897,6 +8915,7 @@
         "touchstart",
         (e) => {
           if (e.touches.length === 2) {
+            diagramGestures.cancel();
             const center = touchCenter(e.touches);
             pinchState = {
               distance: touchDistance(e.touches),
