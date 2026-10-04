@@ -14,6 +14,13 @@ Abra `index.html` ou publique o repositório com GitHub Pages.
 
 > Uso exclusivo para treinamento. Não utilizar para operação em tempo real.
 
+## Aplicativo Android
+
+O aplicativo Android abre a versão publicada do simulador e mantém o login
+e as funções de operador e administrador. Precisa de internet e recebe as
+atualizações do site automaticamente. Código, requisitos e instruções de
+compilação estão em [android/README.md](android/README.md).
+
 ## Análise interna das manobras (v38)
 
 A janela do operador mostra a confirmação do comando, sem relatório de
