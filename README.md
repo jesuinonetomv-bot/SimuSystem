@@ -21,9 +21,18 @@ e as funções de operador e administrador. Precisa de internet e recebe as
 atualizações do site automaticamente. Código, requisitos e instruções de
 compilação estão em [android/README.md](android/README.md).
 
+## Tela livre e opções de exibição (v43)
+
+O diagrama fica sem botões ou legenda sobre os equipamentos. Na barra
+superior, **Exibição** abre as opções de zoom, ajuste à tela, legenda e fluxo
+animado. Feche essa janela para voltar ao diagrama livre. O zoom com dois
+dedos continua disponível no celular. As mensagens ficam em uma faixa fora
+da área do diagrama; os controles de cenário da engenharia também ficam em
+**Exibição**. A mudança chega ao site e ao APK existente pela atualização web.
+
 ## Fluxo animado no unifilar (v41)
 
-O botão **Fluxo animado**, junto à legenda, liga e desliga as setas no próprio
+O botão **Fluxo animado**, em **Exibição**, liga e desliga as setas no próprio
 diagrama. **P · MW** mostra potência ativa em vermelho e **Q · MVAr** mostra
 potência reativa em azul. Os canais podem ser exibidos separadamente. A
 preferência fica salva no navegador e a função chega ao APK pela atualização

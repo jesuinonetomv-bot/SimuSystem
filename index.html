@@ -19,6 +19,10 @@
       }
       body {
         margin: 0;
+        height: 100vh;
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
         font: 14px system-ui;
         color: #17232c;
         overflow: hidden;
@@ -29,13 +33,15 @@
         font: inherit;
       }
       header {
-        height: 64px;
+        min-height: 64px;
+        flex-shrink: 0;
+        flex-wrap: wrap;
         background: var(--nav);
         color: white;
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 0 18px;
+        padding: 10px 18px;
       }
       .brand {
         font-size: 21px;
@@ -68,7 +74,9 @@
         background: var(--accent);
       }
       .workspace {
-        height: calc(100vh - 64px);
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
         display: grid;
         grid-template-columns: 0 1fr;
       }
@@ -211,55 +219,57 @@
         color: #687780;
         font-size: 18px;
       }
-      .status,
-      .legend {
-        position: fixed;
-        background: #fff;
-        padding: 9px 13px;
-        border-radius: 18px;
-        box-shadow: 0 3px 12px #0003;
-        z-index: 20;
-      }
-      .operator-zoom {
-        position: fixed;
-        right: 14px;
-        bottom: 62px;
-        display: flex;
-        gap: 8px;
-        z-index: 21;
-      }
-      .operator-zoom button {
-        width: 46px;
-        height: 46px;
-        border: 0;
-        border-radius: 50%;
-        background: var(--nav);
-        color: #fff;
-        font-size: 22px;
-        font-weight: 850;
-        box-shadow: 0 3px 12px #0004;
-      }
-      .operator-zoom .fit {
-        width: auto;
-        border-radius: 23px;
-        padding: 0 15px;
-        font-size: 13px;
-      }
-      .workspace.eng ~ .operator-zoom {
-        display: none;
-      }
       .status {
-        right: 14px;
-        bottom: 14px;
+        flex-shrink: 0;
+        padding: 5px 12px;
+        border-top: 1px solid #c3ccd1;
+        background: #f4f7f8;
+        color: #53656f;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .legend {
-        right: 14px;
-        top: 78px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 5px;
       }
-      .eng .legend {
-        left: auto;
-        right: 14px;
+      .view-settings {
+        width: min(440px, 92vw);
+        max-height: 85vh;
+        max-height: 85dvh;
+        overflow: auto;
       }
+      .view-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .view-head h2 { margin: 0; flex: 1; }
+      .view-head button,
+      .view-zoom button {
+        min-height: 42px;
+        min-width: 42px;
+        border: 1px solid #9aaeb5;
+        border-radius: 8px;
+        padding: 8px 12px;
+        background: #f5f8f9;
+        color: #24323d;
+        font-weight: 750;
+      }
+      .view-group { border-top: 1px solid #d6dde0; margin-top: 18px; padding-top: 12px; }
+      .view-group[hidden] { display: none; }
+      .view-group h3 { font-size: 14px; margin: 0 0 10px; }
+      .view-zoom { display: flex; gap: 8px; }
+      .view-zoom .fit { flex: 1; }
+      .view-settings .flow-notice { max-width: none; }
+      .view-settings .flow-options input { padding: 0; }
+      .view-settings .flow-controls { margin-top: 0; }
+      .view-settings .hint { margin: 8px 0 0; }
+      .view-settings .legend span { white-space: nowrap; }
+      .view-settings .dot { margin-left: 0; }
       .dot {
         display: inline-block;
         width: 12px;
@@ -378,9 +388,8 @@
       }
       @media (max-width: 720px) {
         header {
-          height: 108px;
-          flex-wrap: wrap;
           padding: 9px 11px;
+          gap: 8px;
         }
         .brand {
           font-size: 17px;
@@ -389,23 +398,14 @@
           display: none;
         }
         .mode {
-          order: 3;
-          width: 100%;
-          text-align: center;
-        }
-        .workspace {
-          height: calc(100vh - 108px);
+          font-size: 12px;
+          padding: 6px 8px;
         }
         .workspace.eng {
           grid-template-columns: 205px 1fr;
         }
         .side {
           padding: 8px;
-        }
-        .eng .legend {
-          display: block;
-          top: 118px;
-          right: 8px;
         }
       }
       .empty[hidden] {
@@ -1068,17 +1068,10 @@
         }
       }
       .time-panel {
-        display: none;
-        position: fixed;
-        left: 14px;
-        bottom: 14px;
-        z-index: 22;
+        display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 7px;
-        padding: 8px 10px;
-        background: #fff;
-        border-radius: 12px;
-        box-shadow: 0 3px 14px #0003;
       }
       .time-panel select,
       .time-panel button {
@@ -1099,9 +1092,6 @@
       .time-panel .playing {
         background: var(--accent);
         color: #fff;
-      }
-      .workspace.eng ~ .time-panel {
-        display: flex;
       }
       .profile-note {
         grid-column: 1/-1;
@@ -1328,17 +1318,6 @@
       }
       .diagram-create textarea { min-height: 70px; resize: vertical; }
       @media (max-width: 720px) {
-        .legend { top: 118px; right: 8px; max-width: calc(100vw - 16px); }
-        .time-panel {
-          left: 6px;
-          bottom: 6px;
-          max-width: calc(100vw - 12px);
-          overflow-x: auto;
-          padding: 6px;
-        }
-        .time-panel span:first-child {
-          display: none;
-        }
         .topology-grid {
           grid-template-columns: 1fr;
         }
@@ -1367,6 +1346,7 @@
         <button class="top" id="diagramManage" hidden>Diagramas</button>
       </div>
       <div class="grow"></div>
+      <button class="top" id="viewSettingsBtn" type="button" aria-haspopup="dialog" aria-controls="viewSettingsBox">Exibição</button>
       <span class="operator-id" id="operatorLabel" hidden></span
       ><span class="alarm-badge" id="alarmCount">Alarmes: 0</span
       ><button class="top" id="historyBtn" hidden>Histórico</button
@@ -1612,50 +1592,64 @@
         <div class="empty" id="empty">Nenhum diagrama publicado</div>
       </section>
     </div>
-    <div class="time-panel" id="timePanel">
-      <span>Cenário:</span
-      ><select id="simulationMode">
-        <option value="steady">Valores fixos</option>
-        <option value="time">Perfil diário automático</option></select
-      ><button type="button" id="simulationPlay" title="Iniciar ou pausar">
-        ▶</button
-      ><select id="simulationSpeed" title="Minutos simulados por segundo">
-        <option value="1">1 min/s</option>
-        <option value="5">5 min/s</option>
-        <option value="15" selected>15 min/s</option>
-        <option value="60">1 h/s</option>
-        <option value="240">4 h/s</option></select
-      ><span class="clock" id="simulationClock">00:00</span
-      ><button
-        type="button"
-        id="simulationReset"
-        title="Voltar para meia-noite"
-      >
-        ↺
-      </button>
-    </div>
-    <div class="legend">
-      <span class="dot red"></span>Fechado <span class="dot green"></span>Aberto
-      <div class="flow-controls">
-        <button id="flowAnimationBtn" type="button" aria-pressed="false"
-          title="Mostrar o sentido da potência ativa e reativa do simulador">▶ Fluxo animado</button>
-        <span id="flowAnimationOptions" class="flow-options" hidden>
-          <label class="flow-active" title="Potência ativa, em MW">
-            <input id="flowShowActive" type="checkbox" checked />P · MW
-          </label>
-          <label class="flow-reactive" title="Potência reativa, em MVAr">
-            <input id="flowShowReactive" type="checkbox" checked />Q · MVAr
-          </label>
-        </span>
-      </div>
-      <small id="flowAnimationNotice" class="flow-notice" role="status" hidden></small>
-    </div>
     <div class="status" id="status">Conectando…</div>
-    <div class="operator-zoom" aria-label="Controles de zoom do operador">
-      <button id="opZoomOut" title="Diminuir zoom">−</button
-      ><button class="fit" id="opFit" title="Ajustar à tela">Ajustar</button
-      ><button id="opZoomIn" title="Aumentar zoom">+</button>
-    </div>
+    <dialog id="viewSettingsBox" class="view-settings" aria-labelledby="viewSettingsTitle">
+      <div class="view-head">
+        <h2 id="viewSettingsTitle">Exibição</h2>
+        <button id="viewSettingsClose" type="button">Fechar</button>
+      </div>
+      <section class="view-group">
+        <h3>Zoom</h3>
+        <div class="view-zoom" aria-label="Controles de zoom">
+          <button id="opZoomOut" type="button" title="Diminuir zoom">−</button>
+          <button class="fit" id="opFit" type="button" title="Ajustar à tela">Ajustar à tela</button>
+          <button id="opZoomIn" type="button" title="Aumentar zoom">+</button>
+        </div>
+        <p class="hint">No celular, use dois dedos para aproximar ou afastar.</p>
+      </section>
+      <section class="view-group">
+        <h3>Legenda</h3>
+        <div class="legend">
+          <span><span class="dot red"></span> Fechado</span>
+          <span><span class="dot green"></span> Aberto</span>
+        </div>
+      </section>
+      <section class="view-group">
+        <h3>Fluxo animado</h3>
+        <div class="flow-controls">
+          <button id="flowAnimationBtn" type="button" aria-pressed="false"
+            title="Mostrar o sentido da potência ativa e reativa do simulador">▶ Fluxo animado</button>
+          <span id="flowAnimationOptions" class="flow-options" hidden>
+            <label class="flow-active" title="Potência ativa, em MW">
+              <input id="flowShowActive" type="checkbox" checked />P · MW
+            </label>
+            <label class="flow-reactive" title="Potência reativa, em MVAr">
+              <input id="flowShowReactive" type="checkbox" checked />Q · MVAr
+            </label>
+          </span>
+        </div>
+        <small id="flowAnimationNotice" class="flow-notice" role="status" hidden></small>
+      </section>
+      <section id="viewScenario" class="view-group" hidden>
+        <h3>Cenário</h3>
+        <div class="time-panel" id="timePanel">
+          <select id="simulationMode" aria-label="Tipo de cenário">
+            <option value="steady">Valores fixos</option>
+            <option value="time">Perfil diário automático</option>
+          </select>
+          <button type="button" id="simulationPlay" title="Iniciar ou pausar">▶</button>
+          <select id="simulationSpeed" title="Minutos simulados por segundo">
+            <option value="1">1 min/s</option>
+            <option value="5">5 min/s</option>
+            <option value="15" selected>15 min/s</option>
+            <option value="60">1 h/s</option>
+            <option value="240">4 h/s</option>
+          </select>
+          <span class="clock" id="simulationClock">00:00</span>
+          <button type="button" id="simulationReset" title="Voltar para meia-noite">↺</button>
+        </div>
+      </section>
+    </dialog>
     <dialog id="diagramBox" class="diagram-manager">
       <div class="history-head">
         <div>
@@ -7938,6 +7932,8 @@
       };
       $("#powerFlowClose").onclick = () => $("#powerFlowBox").close();
       $("#runPowerFlow").onclick = runPowerFlowStudy;
+      $("#viewSettingsBtn").onclick = () => $("#viewSettingsBox").showModal();
+      $("#viewSettingsClose").onclick = () => $("#viewSettingsBox").close();
       $("#flowAnimationBtn").onclick = () => {
         flowAnimationEnabled = !flowAnimationEnabled;
         localStorage.setItem("simuFlowAnimation", flowAnimationEnabled ? "1" : "0");
@@ -8657,6 +8653,7 @@
       };
       function updateTimeControls(state = timeEngine.snapshot()) {
         const allowed = eng || !!operatorSession;
+        $("#viewScenario").hidden = !eng;
         $("#simulationMode").value = state.mode;
         $("#simulationSpeed").value = String(state.speed);
         $("#simulationClock").textContent = state.time;
