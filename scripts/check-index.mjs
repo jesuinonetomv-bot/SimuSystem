@@ -19,7 +19,7 @@ const sw = readFileSync(new URL("sw.js", root), "utf8");
 new Script(sw, { filename: "sw.js" });
 assert.ok(sw.includes('"./src/switching-analysis.js?v=41"'),
   "Switching analysis must be in the offline asset list");
-assert.ok(sw.includes('"./src/diagram-gestures.js?v=39"'),
+assert.ok(sw.includes('"./src/diagram-gestures.js?v=42"'),
   "Diagram gestures must be in the offline asset list");
 assert.ok(sw.includes('"./src/session-timeout.js?v=40"'),
   "Session timeout must be in the offline asset list");

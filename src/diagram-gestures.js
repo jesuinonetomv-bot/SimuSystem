@@ -3,7 +3,7 @@
 export function attachDiagramGestures({ viewport, enabled, onTap,
   itemId = (event) => event.target.closest?.(".item")?.dataset.id ?? null }) {
   const ownerWindow = viewport.ownerDocument.defaultView;
-  let gesture = null;
+  let gesture = null, pendingTap = null;
 
   function finish() {
     const previous = gesture;
@@ -14,7 +14,7 @@ export function attachDiagramGestures({ viewport, enabled, onTap,
     return previous;
   }
 
-  function cancel() { finish(); }
+  function cancel() { finish(); pendingTap = null; }
 
   function moved(event) {
     if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > gesture.tolerance)
@@ -22,6 +22,7 @@ export function attachDiagramGestures({ viewport, enabled, onTap,
   }
 
   function anotherPointer(event) {
+    pendingTap = null;
     if (gesture && event.pointerId !== gesture.pointerId) cancel();
   }
 
@@ -72,7 +73,20 @@ export function attachDiagramGestures({ viewport, enabled, onTap,
     scroll();
     const completed = finish();
     if (enabled() && !completed.moved && !completed.scrolled && completed.item !== null)
-      onTap(event, completed.item);
+      pendingTap = { item: completed.item, pointerId: completed.pointerId };
+  }
+
+  function click(event) {
+    if (!pendingTap) return;
+    const completed = pendingTap;
+    pendingTap = null;
+    if (!enabled() || event.button !== 0 || (!event.detail && !event.pointerType) ||
+        (event.pointerId > 0 && event.pointerId !== completed.pointerId)) return;
+    // Opening on pointerup can expose a dialog button to the following click.
+    // Consume the selection click before showing any faceplate or its controls.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    onTap(event, completed.item);
   }
 
   function interrupted(event) {
@@ -86,6 +100,8 @@ export function attachDiagramGestures({ viewport, enabled, onTap,
   ownerWindow.addEventListener("pointerdown", anotherPointer, true);
   ownerWindow.addEventListener("pointermove", move, { capture: true, passive: false });
   ownerWindow.addEventListener("pointerup", up, true);
+  ownerWindow.addEventListener("click", click, true);
+  ownerWindow.addEventListener("keydown", cancel, true);
   ownerWindow.addEventListener("pointercancel", interrupted, true);
   ownerWindow.addEventListener("blur", cancel);
 
@@ -100,6 +116,8 @@ export function attachDiagramGestures({ viewport, enabled, onTap,
       ownerWindow.removeEventListener("pointerdown", anotherPointer, true);
       ownerWindow.removeEventListener("pointermove", move, true);
       ownerWindow.removeEventListener("pointerup", up, true);
+      ownerWindow.removeEventListener("click", click, true);
+      ownerWindow.removeEventListener("keydown", cancel, true);
       ownerWindow.removeEventListener("pointercancel", interrupted, true);
       ownerWindow.removeEventListener("blur", cancel);
     },

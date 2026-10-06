@@ -61,9 +61,13 @@ confirmação. Uma sessão anterior recuperada respeita o horário de encerramen
 e o limite de segundo plano. O botão e a expiração chegam ao APK existente
 pela atualização do site.
 
-## Toque, seleção e movimento (v39)
+## Toque, seleção e movimento (v42)
 
-Na operação, o faceplate abre ao soltar um clique ou toque sem arraste.
+Na operação, o faceplate abre ao completar um clique ou toque sem arraste.
+O clique de seleção é consumido antes de abrir a janela, impedindo que o
+mesmo toque acione ABRIR, FECHAR ou outro controle do faceplate. O comando
+exige uma nova ação no botão de confirmação. Fechar a janela pelo botão,
+por Cancelar ou pela tecla Esc cancela o equipamento pendente.
 Pequenas oscilações do dedo são toleradas. Arrastar com o mouse move a tela;
 no celular permanece a rolagem pelo dedo. Arraste, rolagem, cancelamento do
 gesto e zoom com dois dedos não abrem faceplate. O reconhecimento usa pixels

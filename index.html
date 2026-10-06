@@ -2590,7 +2590,7 @@
       import { GridDynamics } from "./src/grid-dynamics.js";
       import { solveDiagramPowerFlow } from "./src/power-flow.js";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=41";
-      import { attachDiagramGestures } from "./src/diagram-gestures.js?v=39";
+      import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
       import { calculateAnimatedFlow, createFlowAnimator } from "./src/flow-animation.js?v=41";
       const cfg = {
@@ -8419,7 +8419,7 @@
         }
       };
       $("#cmdOk").onclick = () => {
-        if (!operatorSession || !pending || !sessionTimeout.check()) return;
+        if (!operatorSession || !pending || !$("#cmd").open || !sessionTimeout.check()) return;
         const equipmentId = pending,
           o = diagram.items[equipmentId];
         if (
@@ -8580,10 +8580,18 @@
         $("#cmd").close();
         pending = null;
       };
+      $("#cmd").addEventListener("cancel", () => { pending = null; });
+      $("#cmd").addEventListener("close", () => {
+        if (!$("#cmd").open) pending = null;
+      });
       $("#busCancel").onclick = $("#busClose").onclick = () => {
         $("#busBox").close();
         busPending = null;
       };
+      $("#busBox").addEventListener("cancel", () => { busPending = null; });
+      $("#busBox").addEventListener("close", () => {
+        if (!$("#busBox").open) busPending = null;
+      });
       $("#maintenanceBtn").onclick = () => {
         if (!busPending) return;
         const k = busPending,
@@ -9010,7 +9018,7 @@
       const wrap = document.querySelector(".wrap");
       const diagramGestures = attachDiagramGestures({
         viewport: wrap,
-        enabled: () => !eng,
+        enabled: () => !eng && !document.querySelector("dialog[open]"),
         onTap: (event, id) => {
           if (diagram.items[id]) down(event, id);
         },

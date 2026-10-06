@@ -413,7 +413,9 @@ function operationAdapter(initial, { remoteStates = [], rules = [], maint = {} }
     'const operatorDiagramStates=new Map(remoteStates), maintenance=maint, calls={draws:[],commands:0};' +
     'const cleanDiagram=(value=diagram)=>JSON.parse(JSON.stringify(value));' +
     'const nodes=new Map(); const $=(id)=>{if(!nodes.has(id))nodes.set(id,' +
-      '{open:false,textContent:"",close(){this.open=false;},showModal(){this.open=true;}});return nodes.get(id);};' +
+      'Object.assign(new EventTarget(), {open:false,textContent:"",' +
+      'close(){this.open=false;this.dispatchEvent(new Event("close"));},' +
+      'showModal(){this.open=true;}}));return nodes.get(id);};' +
     'const registerCommand=()=>calls.commands++; const persistOperatorSession=()=>{};' +
     'const draw=(...args)=>calls.draws.push(args); const commandAttemptRules=()=>rules;' +
     'const commandBlockingRule=()=>null, controlRuleCoversTransition=()=>false;' +
@@ -424,11 +426,47 @@ function operationAdapter(initial, { remoteStates = [], rules = [], maint = {} }
     extract("      function switchingAnalysisFor(", "      function controlRules(") +
     extract("      function transformerSequenceViolation(", "      function disconnectorUnderLoad(") +
     extract("      function applyAutomaticCommand(", "      function intendedCommandState(") +
-    extract('      $("#cmdOk").onclick =', '      $("#cmdCancel").onclick =') +
-    'return {execute(id){pending=id; $("#cmd").open=true; $("#cmdOk").onclick();},' +
+    extract('      $("#cmdOk").onclick =', '      $("#busCancel").onclick =') +
+    'return {execute(id,{open=true}={}){pending=id; $("#cmd").open=open; $("#cmdOk").onclick();},' +
+      'select(id){pending=id; $("#cmd").showModal();}, confirm(){$("#cmdOk").onclick();},' +
       'diagram,nodes,calls,operatorSession,operatorDiagramStates};'
   )(initial, remoteStates, rules, maint, createSwitchingStudy);
 }
+for (const state of ["open", "closed"])
+test(`the real command handler cannot toggle a ${state} breaker with a closed faceplate`, () => {
+  const d = basic(); d.items.tie.state = state;
+  const app = operationAdapter(d);
+  app.execute("tie", { open: false });
+  assert.equal(d.items.tie.state, state);
+  assert.equal(app.calls.commands, 0);
+  assert.equal(app.calls.draws.length, 0);
+  assert.equal(app.operatorSession.errors, 0);
+});
+test("native Escape cancellation clears the command even before the dialog closes", () => {
+  const d = basic(), app = operationAdapter(d);
+  app.select("tie");
+  app.nodes.get("#cmd").dispatchEvent(new Event("cancel"));
+  app.confirm();
+  assert.equal(d.items.tie.state, "open");
+  assert.equal(app.calls.commands, 0);
+});
+test("closing a faceplate clears its pending equipment before a delayed activation", () => {
+  const d = basic(), app = operationAdapter(d);
+  app.select("tie");
+  app.nodes.get("#cmd").close();
+  app.nodes.get("#cmd").showModal();
+  app.confirm();
+  assert.equal(d.items.tie.state, "open");
+  assert.equal(app.calls.commands, 0);
+});
+test("a queued close event cannot clear a newly reopened faceplate", () => {
+  const d = basic(false, false), app = operationAdapter(d);
+  app.select("tie");
+  app.nodes.get("#cmd").dispatchEvent(new Event("close"));
+  app.confirm();
+  assert.equal(d.items.tie.state, "closed");
+  assert.equal(app.calls.commands, 1);
+});
 test("the real command handler alarms and records a no-impedance closure after performing it", () => {
   const d = basic();
   d.items.other = closedOther();
