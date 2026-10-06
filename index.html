@@ -677,6 +677,45 @@
       .flow-segment {
         display: none;
       }
+      .flow-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 8px;
+      }
+      .flow-controls button {
+        border: 1px solid #9aaeb5;
+        background: #f5f8f9;
+        color: #24323d;
+        border-radius: 8px;
+        min-height: 40px;
+        padding: 8px 11px;
+        font-weight: 750;
+      }
+      .flow-controls button[aria-pressed="true"] {
+        background: #e4f0ef;
+        border-color: var(--accent);
+      }
+      .flow-options {
+        display: flex;
+        gap: 10px;
+        font-weight: 750;
+        font-size: 12px;
+      }
+      .flow-options[hidden], .flow-notice[hidden] { display: none; }
+      .flow-options label { display: flex; align-items: center; gap: 4px; }
+      .flow-options input { margin: 0; width: 16px; height: 16px; }
+      .flow-active { color: #b91c1c; }
+      .flow-reactive { color: #1d4ed8; }
+      .flow-notice {
+        display: block;
+        max-width: 290px;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #5f7079;
+      }
+      .flow-animation-layer, .power-flow-arrow { pointer-events: none; }
       .item.energized.closed .eq {
         stroke: var(--red);
         stroke-width: 4;
@@ -1289,6 +1328,7 @@
       }
       .diagram-create textarea { min-height: 70px; resize: vertical; }
       @media (max-width: 720px) {
+        .legend { top: 118px; right: 8px; max-width: calc(100vw - 16px); }
         .time-panel {
           left: 6px;
           bottom: 6px;
@@ -1596,6 +1636,19 @@
     </div>
     <div class="legend">
       <span class="dot red"></span>Fechado <span class="dot green"></span>Aberto
+      <div class="flow-controls">
+        <button id="flowAnimationBtn" type="button" aria-pressed="false"
+          title="Mostrar o sentido da potência ativa e reativa do simulador">▶ Fluxo animado</button>
+        <span id="flowAnimationOptions" class="flow-options" hidden>
+          <label class="flow-active" title="Potência ativa, em MW">
+            <input id="flowShowActive" type="checkbox" checked />P · MW
+          </label>
+          <label class="flow-reactive" title="Potência reativa, em MVAr">
+            <input id="flowShowReactive" type="checkbox" checked />Q · MVAr
+          </label>
+        </span>
+      </div>
+      <small id="flowAnimationNotice" class="flow-notice" role="status" hidden></small>
     </div>
     <div class="status" id="status">Conectando…</div>
     <div class="operator-zoom" aria-label="Controles de zoom do operador">
@@ -2536,9 +2589,10 @@
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
       import { solveDiagramPowerFlow } from "./src/power-flow.js";
-      import { createSwitchingStudy } from "./src/switching-analysis.js?v=38";
+      import { createSwitchingStudy } from "./src/switching-analysis.js?v=41";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=39";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
+      import { calculateAnimatedFlow, createFlowAnimator } from "./src/flow-animation.js?v=41";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -2554,6 +2608,10 @@
         NS = "http://www.w3.org/2000/svg",
         $ = (s) => document.querySelector(s),
         stage = $("#stage");
+      const flowAnimator = createFlowAnimator({ stage });
+      let flowAnimationEnabled = localStorage.getItem("simuFlowAnimation") === "1";
+      $("#flowShowActive").checked = localStorage.getItem("simuFlowActive") !== "0";
+      $("#flowShowReactive").checked = localStorage.getItem("simuFlowReactive") !== "0";
       let electricalResults = new Map(),
         eng = false,
         guest = true,
@@ -5604,10 +5662,10 @@
       function draw(evaluateAlarm = false, skipSupplyAlarms = false) {
         stage.innerHTML = "";
         const viewDiagram = diagram,
-          globalDiagram = globalSimulationDiagram(),
-          flow = flowAnalysis();
+          globalDiagram = globalSimulationDiagram();
         if (globalDiagram) diagram = globalDiagram;
-        const live = energyMap();
+        const study = createSwitchingStudy(diagram, { terminals, electricalData }),
+          live = study.energizedItems();
         electricalResults = calculateElectricalState();
         for (const [id, result] of electricalResults)
           if (!live.has(id)) {
@@ -5616,6 +5674,9 @@
               "frequencyHz", "currentA", "activeMW", "reactiveMvar", "loadingPercent",
               "overfluxPercent"]) result[field] = 0;
           }
+        const animatedFlow = flowAnimationEnabled
+          ? calculateAnimatedFlow(study.network(), electricalResults, { electricalData })
+          : null;
         diagram = viewDiagram;
         monitorTransformerOverload(evaluateAlarm);
         monitorTransformerOverflux(evaluateAlarm);
@@ -5632,7 +5693,6 @@
               " " +
               (selectedIds.has(k) || selected === k ? "selected " : "") +
               (live.has(k) ? "energized " : "") +
-              (flow.devices.has(k) ? "flowing " : "") +
               ((o.type === "bus" || o.type === "transformer") &&
               (maintenance[k] === true || o.inMaintenance === true)
                 ? "maintenance"
@@ -6214,16 +6274,25 @@
           };
           stage.append(g);
         }
-        for (const f of flow.segments)
-          stage.append(
-            E("line", {
-              x1: f.x1,
-              y1: f.y1,
-              x2: f.x2,
-              y2: f.y2,
-              class: "flow-segment",
-            }),
-          );
+        const visibleSegments = (animatedFlow?.segments || [])
+          .filter((segment) => diagram.items[segment.itemId]);
+        flowAnimator.update({
+          segments: visibleSegments,
+          enabled: flowAnimationEnabled,
+          showActive: $("#flowShowActive").checked,
+          showReactive: $("#flowShowReactive").checked,
+        });
+        $("#flowAnimationBtn").setAttribute("aria-pressed", String(flowAnimationEnabled));
+        $("#flowAnimationOptions").hidden = !flowAnimationEnabled;
+        const notice = $("#flowAnimationNotice");
+        const invalid = [...(animatedFlow?.invalidItems || [])].some((id) => diagram.items[id]),
+          ambiguous = [...(animatedFlow?.ambiguousItems || [])].some((id) => diagram.items[id]);
+        notice.textContent = invalid
+          ? "Dados ou balanço de potência a verificar nesta tela."
+          : ambiguous
+            ? "Sentido indefinido nos trechos do anel sem impedância."
+            : !visibleSegments.length ? "Sem transferência de potência nesta tela." : "";
+        notice.hidden = !flowAnimationEnabled || !notice.textContent;
         addConductorGroupLabels();
         monitorProtected(live, evaluateAlarm && !skipSupplyAlarms);
         evaluateControlRules(evaluateAlarm);
@@ -7869,6 +7938,19 @@
       };
       $("#powerFlowClose").onclick = () => $("#powerFlowBox").close();
       $("#runPowerFlow").onclick = runPowerFlowStudy;
+      $("#flowAnimationBtn").onclick = () => {
+        flowAnimationEnabled = !flowAnimationEnabled;
+        localStorage.setItem("simuFlowAnimation", flowAnimationEnabled ? "1" : "0");
+        draw(false);
+      };
+      $("#flowShowActive").onchange = () => {
+        localStorage.setItem("simuFlowActive", $("#flowShowActive").checked ? "1" : "0");
+        draw(false);
+      };
+      $("#flowShowReactive").onchange = () => {
+        localStorage.setItem("simuFlowReactive", $("#flowShowReactive").checked ? "1" : "0");
+        draw(false);
+      };
       $("#electricalBtn").onclick = openElectrical;
       $("#topologyBtn").onclick = openTopology;
       $("#configureSelectedTopology").onclick = () => {

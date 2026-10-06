@@ -21,6 +21,31 @@ e as funções de operador e administrador. Precisa de internet e recebe as
 atualizações do site automaticamente. Código, requisitos e instruções de
 compilação estão em [android/README.md](android/README.md).
 
+## Fluxo animado no unifilar (v41)
+
+O botão **Fluxo animado**, junto à legenda, liga e desliga as setas no próprio
+diagrama. **P · MW** mostra potência ativa em vermelho e **Q · MVAr** mostra
+potência reativa em azul. Os canais podem ser exibidos separadamente. A
+preferência fica salva no navegador e a função chega ao APK pela atualização
+do site.
+
+As setas acompanham as manobras e os perfis de carga/geração. O sinal é
+independente para P e Q: exportação inverte P e uma carga capacitiva ou banco
+de capacitores pode inverter Q. Não há setas em transferências nulas, ilhas
+sem fonte ou através de disjuntores/seccionadoras abertos. A topologia e os
+conectores entre abas são os mesmos utilizados pela análise das manobras.
+As setas não capturam toques nem prejudicam seleção, arraste ou zoom. A
+animação pausa em segundo plano e respeita a preferência de movimento reduzido.
+
+Esta visualização distribui os valores P/Q do modelo de treinamento por
+conservação de potência, sem perdas, com as impedâncias cadastradas em uma
+base comum. Não é uma solução AC: Q usa a mesma alocação linear, sem resolver
+as magnitudes e os ângulos de tensão. O estudo AC continua no botão **Fluxo de
+carga**. Em um ciclo apenas de conexões ideais, o sentido nos ramos internos
+fica indefinido e as respectivas setas são omitidas; os alimentadores com
+fluxo determinado continuam visíveis. Dados inválidos ou um intercâmbio
+forçado incompatível com o balanço também são indicados, sem fabricar fluxo.
+
 ## Saída e segundo plano (v40)
 
 O botão **Sair** encerra a sessão de operador ou administrador e retorna à

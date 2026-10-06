@@ -412,7 +412,17 @@ export function createSwitchingStudy(diagram, options = {}) {
     }
     return candidates;
   }
-  return { analyze, command, openingCandidates, energizedItems };
+  // Read-only snapshot of the same terminal connections used by the commands.
+  // Visualization must not rebuild a proximity graph that bypasses open devices.
+  const network = (states = {}) => ({
+    items,
+    ports: new Map([...ports].map(([id, keys]) => [id, [...keys]])),
+    points: new Map([...points].map(([key, point]) => [key, { ...point }])),
+    edges: edges.filter((e) => conducts(e, states)).map((e) => ({ ...e })),
+    sources: sourceEntries.map(([id]) => id),
+    issues: issues.map((x) => ({ ...x })),
+  });
+  return { analyze, command, openingCandidates, energizedItems, network };
 }
 export function analyzeSwitching(diagram, switchId, options = {}) {
   return createSwitchingStudy(diagram, options).analyze(switchId);
