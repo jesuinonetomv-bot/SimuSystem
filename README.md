@@ -2,6 +2,52 @@
 
 Protótipo vetorial e responsivo do simulador de manobras do sistema elétrico.
 
+## Curto-circuito ANSI / IEC (v46)
+
+Em **Estudos → Curto-circuito · ANSI / IEC**, configure casos de falta trifásica
+nas barras do estado atual ou em um exemplo independente. O painel reúne
+Configuração, Fontes, Ajustes, Alertas e Resultados. Casos são salvos localmente
+por modelo; JSON transfere os parâmetros entre aparelhos. CSV e o relatório
+copiado incluem parâmetros, pendências, hipóteses, contribuições e correntes
+dos ramos. O navegador também oferece impressão; o WebView usa cópia de texto.
+
+IEC: condições máxima, mínima e `c` personalizado; tolerância BT de 6%/10%;
+correções opcionais K_T/K_G das equações de referência IEC 60909-0:2016.
+A impedância da rede externa inclui seu fator `c`, preservando o MVA de curto
+informado na própria barra. O mínimo exige MVA e X/R mínimos da concessionária
+e temperatura final quando há resistência de linha. R cadastrada é referida
+a 20 °C e corrigida por `1 + 0,004 × (temperatura − 20)` somente no mínimo.
+
+ANSI: rede de ½ ciclo, rede de 1,5–4 ciclos e rede de 30 ciclos. Geradores
+síncronos usam X″d nos dois primeiros períodos e X′d no último; a resistência
+derivada de X″d/X/R é mantida. X/R é calculado com redes R e X separadas.
+O nominal conserva `c = 1`, sem correções IEC. Neste módulo, os transformadores
+usam a relação nominal. O cálculo antigo permanece disponível como API de
+compatibilidade, com suas hipóteses originais.
+
+Fontes podem seguir a operação, participar ou ficar fora apenas no caso; isso
+não fecha contatos. Ajustes usam uma cópia e não comandam dispositivos. Dados
+necessários ausentes impedem o cálculo da ilha correspondente, sem impedâncias
+ou capacidades arbitrárias. Correntes das fontes são somadas como fasores na
+base da barra de falta; a corrente local também aparece. Ramos mostram ambos
+os lados, com conversão de tensão nos transformadores.
+
+Pico, componente DC, RMS assimétrica e corrente térmica são **estimativas do
+equivalente R-L com AC constante**, pelo pior ângulo de início. O pico maximiza
+a envoltória no primeiro ciclo; DC e RMS usam o tempo escolhido e o efeito
+térmico é integrado na duração informada. Não são fatores ANSI MFi/NACD nem
+correntes de interrupção IEC normativas. Capacidades simétrica/de pico das
+barras recebem comparação preliminar; o mínimo IEC e os períodos ANSI de
+interrupção/30 ciclos não avaliam a capacidade momentânea. Correntes individuais
+de disjuntores fundidos em contatos ideais não são determinadas.
+
+Escopo: sequência positiva, fontes síncronas/rede externa, linhas e
+transformadores de dois enrolamentos. Sem motores, inversores, K_S de unidades
+gerador-transformador, decaimento AC, faltas desequilibradas, aterramento ou
+certificação integral ANSI/IEC, incluindo IEC 60909-0:2026.
+O exemplo foi criado com valores didáticos próprios; os PDFs de referência
+não são distribuídos no repositório.
+
 ## Casos de estudo e temas (v45.1)
 
 Em **Exibição → Tema do unifilar**, selecione ETAP · AC, SimuSystem · clássico

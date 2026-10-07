@@ -18,6 +18,7 @@ export function studyElectricalData(o) {
 }
 
 export function buildStudyNetwork(diagram, options = {}) {
+  const shortCircuit = options.studyKind === "shortCircuit";
   const baseMVA = options.baseMVA ?? 100;
   if (!positive(baseMVA)) throw Error("A potência-base deve ser maior que zero.");
   const electricalData = options.electricalData || studyElectricalData;
@@ -120,12 +121,12 @@ export function buildStudyNetwork(diagram, options = {}) {
       br.ampacityA = o.electrical?.ampacityA;
     } else {
       if (!positive(e.ratedMVA) || !positive(e.impedancePercent) || !positive(e.transformerXR) ||
-          !finite(e.tapPercent) || 1 + +e.tapPercent / 100 <= 0) {
+          (!shortCircuit && (!finite(e.tapPercent) || 1 + +e.tapPercent / 100 <= 0))) {
         error(br.itemId, "MVA, Z%, X/R ou tap inválido"); continue;
       }
       const z = +e.impedancePercent / 100 * baseMVA / +e.ratedMVA, xr = +e.transformerXR;
       br.r = z / Math.hypot(1, xr); br.x = br.r * xr;
-      br.tap = 1 + +e.tapPercent / 100; br.ratedMVA = +e.ratedMVA;
+      br.tap = shortCircuit ? 1 : 1 + +e.tapPercent / 100; br.ratedMVA = +e.ratedMVA;
       if (o.electrical?.ratedMVA == null || o.electrical?.impedancePercent == null)
         warn(br.itemId, "transformador com dados padrão (" + e.ratedMVA + " MVA; Z " + e.impedancePercent + "%)");
       if (o.electrical?.transformerXR == null) warn(br.itemId, "X/R do transformador assumido = " + e.transformerXR);
@@ -139,7 +140,7 @@ export function buildStudyNetwork(diagram, options = {}) {
   for (const [id, ps] of ports) {
     const o = items[id], e = electricalData(o), b = buses[at(ps[0])];
     const scale = finite(o.runtimeScale) ? +o.runtimeScale : 1;
-    if (o.type === "load" && o.state === "active") {
+    if (!shortCircuit && o.type === "load" && o.state === "active") {
       if (!finite(e.activePowerMW) || +e.activePowerMW < 0 || !positive(e.powerFactor) || +e.powerFactor > 1 || scale < 0) {
         error(id, "potência ou fator de potência inválido"); continue;
       }
@@ -150,7 +151,7 @@ export function buildStudyNetwork(diagram, options = {}) {
       b.loadMW += p; b.loadMvar += q;
       if (o.electrical?.activePowerMW == null) warn(id, "carga com potência padrão " + p + " MW");
     }
-    if (o.type === "capacitor") {
+    if (!shortCircuit && o.type === "capacitor") {
       const count = +e.capacitorStages, stages = o.activeStages ?? count;
       if (!positive(count) || !finite(e.capacitorMvar) || +e.capacitorMvar < 0 || !finite(stages)) {
         error(id, "potência ou estágios inválidos"); continue;
@@ -161,6 +162,7 @@ export function buildStudyNetwork(diagram, options = {}) {
     if (!sources.includes(id)) continue;
     const source = { id, name: name(id), bus: b.id, type: o.type, data: e, raw: o.electrical || {} };
     sourceData.push(source);
+    if (shortCircuit) { source.mode = "shortCircuit"; continue; }
     if (o.type === "turbogenerator") {
       const p = o.controlMode === "manual" ? o.manualGenerationMW : +e.generationMW * scale;
       if (!finite(p) || !finite(e.generationMvar)) error(id, "geração P/Q inválida");
@@ -205,7 +207,7 @@ export function buildStudyNetwork(diagram, options = {}) {
     const explicitReferences = islandSources.filter(s => s.type === "turbogenerator" && s.mode === "slack");
     if (explicitReferences.length > 1 || (explicitReferences.length && islandSources.some(s => s.type !== "turbogenerator")))
       for (const s of explicitReferences) error(s.id, "use apenas uma referência por ilha; com a rede em operação, selecione Auto, PV ou PQ");
-    if (sourceIds.length && !ids.some((i) => buses[i].type === "Slack")) {
+    if (!shortCircuit && sourceIds.length && !ids.some((i) => buses[i].type === "Slack")) {
       const first = islandSources.find(s => s.mode === "auto");
       if (!first) for (const s of islandSources) error(s.id, "ilha sem referência de tensão; selecione Auto ou Referência em um gerador");
       else {

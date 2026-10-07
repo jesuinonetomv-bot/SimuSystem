@@ -18,3 +18,15 @@ export function exampleStudyDiagram() {
       electrical: { nominalKV: 13.8, generationMW: 4, generationMvar: 0, generatorRatedMVA: 10, voltageSetpointPU: 1 } },
   } };
 }
+
+export function faultStudyExample() {
+  const diagram = exampleStudyDiagram();
+  diagram.name = "Exemplo didático · curto-circuito";
+  Object.assign(diagram.items.grid.electrical, { shortCircuitMVAMin: 3000, sourceXRMin: 10 });
+  Object.assign(diagram.items.tg.electrical, { subtransientPercent: 20, transientPercent: 35,
+    sourceXR: 15, generatorRatedPowerFactor: .8 });
+  for (const id of ["lv", "feeder"]) Object.assign(diagram.items[id].electrical, {
+    shortCircuitRatingKA: 25, peakWithstandKA: 63 });
+  Object.assign(diagram.items.hv.electrical, { shortCircuitRatingKA: 40, peakWithstandKA: 100 });
+  return diagram;
+}

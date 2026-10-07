@@ -160,6 +160,7 @@ header #login, header #operatorLoginBtn { display: none; }
 .case-stats > div { background: #eff5fb; padding: 13px; border-radius: 4px; }
 .case-stats small { display: block; color: #64798e; margin-bottom: 6px; }
 .case-stats strong { font-size: 18px; font-variant-numeric: tabular-nums; color: #263f59; }
+.sc-detail-stats { margin-top: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .case-check { display: flex; justify-content: flex-start; align-items: center; gap: 7px; margin: 14px 0; font-size: 12px; }
 .case-check input { width: 16px; height: 16px; padding: 0; margin: 0; flex-shrink: 0; }
 .case-alert-list p { margin: 6px 0; padding: 8px 12px; font-size: 12px; background: #f5f8fb; border-left: 3px solid #8b9cad; }
@@ -183,6 +184,7 @@ header #login, header #operatorLoginBtn { display: none; }
   .case-tabs { padding: 0 10px; }
   .case-tabs button { padding: 10px 9px; font-size: 12px; }
   .case-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sc-detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .case-stats strong { font-size: 16px; }
 }
 @media (max-width: 440px) { .theme-grid { grid-template-columns: 1fr; } .case-fields { gap: 10px; } }
@@ -192,9 +194,10 @@ header #login, header #operatorLoginBtn { display: none; }
   dialog.printing-report { display: block; position: static; margin: 0; width: 100%; max-width: none; max-height: none; height: auto; overflow: visible; border: 0; color: #000; }
   dialog.printing-report::backdrop { display: none; }
   .printing-report .case-tabs, .printing-report .case-bar, .printing-report .case-run,
-  .printing-report .case-buttons, .printing-report .case-check, .printing-report #lfReportPreview,
-  .printing-report [role="tabpanel"]:not(#lfResults), .printing-report #powerFlowClose { display: none !important; }
-  .printing-report #lfResults { display: block !important; }
+  .printing-report .case-buttons, .printing-report .case-check, .printing-report #lfReportPreview, .printing-report #scReportPreview,
+  .printing-report [role="tabpanel"]:not(#lfResults):not(#scResults), .printing-report #powerFlowClose,
+  .printing-report [data-close], .printing-report #scResults > .case-fields { display: none !important; }
+  .printing-report #lfResults, .printing-report #scResults { display: block !important; }
   .printing-report .case-table-scroll { overflow: visible; }
   .printing-report .study-table { font-size: 9px; width: 100%; }
   .printing-report .study-table th, .printing-report .study-table td { font-size: 9px; padding: 4px; white-space: normal; }

@@ -1,6 +1,8 @@
-import { calculateThreePhaseFault, PROTECTION_CURVES, protectionTime, compareProtection } from "./electrical-studies.js?v=45.1";
+import { PROTECTION_CURVES, protectionTime, compareProtection } from "./electrical-studies.js?v=46";
 
-export function attachStudyWorkbench({ getDiagram, networkOptions, openPowerFlow, setOverlay, onOpen, onClose }) {
+import { attachShortCircuitWorkbench } from "./short-circuit-workbench.js?v=46";
+
+export function attachStudyWorkbench({ getDiagram, getScope, networkOptions, openPowerFlow, setOverlay, onOpen, onClose }) {
   const $ = (id) => document.getElementById(id);
   const create = (id, title, body, className = "study-box") => {
     const dialog = document.createElement("dialog");
@@ -18,19 +20,13 @@ export function attachStudyWorkbench({ getDiagram, networkOptions, openPowerFlow
     <p class="study-intro" id="studiesContext"></p>
     <div class="study-cards">
       <button class="study-card" id="studyLoadFlow"><span>01 · REGIME PERMANENTE</span><strong>Fluxo de carga</strong><small>Tensões, ângulos, potências e perdas na rede AC.</small></button>
-      <button class="study-card" id="studyFault"><span>02 · FALTA BALANCEADA</span><strong>Curto trifásico</strong><small>Corrente inicial simétrica nas barras e impedância equivalente.</small></button>
+      <button class="study-card" id="studyFault"><span>02 · FALTA BALANCEADA</span><strong>Curto-circuito · ANSI / IEC</strong><small>Casos trifásicos, contribuições das fontes e correntes nas barras.</small></button>
       <button class="study-card" id="studyProtection"><span>03 · TEMPO × CORRENTE</span><strong>Curvas de proteção</strong><small>Compare duas curvas e a margem de tempo na corrente escolhida.</small></button>
     </div>
     <p class="study-note">Os estudos usam um retrato do estado atual. Dados nominais são cadastrados em Modelagem → Dados elétricos. As hipóteses e os parâmetros pendentes aparecem em cada cálculo.</p>
     <div class="study-actions"><button id="clearStudyOverlay" type="button">Limpar resultados do unifilar</button></div>`, "study-hub");
-  const fault = create("faultBox", "Curto-circuito trifásico", `
-    <div class="study-controls"><label>Potência-base (MVA)<input id="faultBase" type="number" min="1" value="100" step="1"></label>
-      <button id="runFault" type="button">Calcular nas barras</button></div>
-    <div class="study-summary" id="faultSummary" role="status">Cadastre MVA de curto da rede e X″d do gerador para calcular suas contribuições.</div>
-    <div class="study-actions"><button id="applyFault" type="button" disabled>Mostrar no unifilar</button></div>
-    <p class="study-note">Modelo para treinamento: falta franca balanceada; sequência positiva; c = 1; tensão pré-falta nominal. Sem motores, componente contínua, impedância de falta ou correções IEC de equipamentos. O resultado não representa a corrente de pico nem um estudo IEC 60909 completo.</p>
-    <div class="study-scroll"><table class="study-table"><thead><tr><th>Barra / nó</th><th>kV</th><th>I″k (kA)</th><th>MVA de curto</th><th>R eq. (Ω)</th><th>X eq. (Ω)</th><th>Situação</th></tr></thead><tbody id="faultRows"></tbody></table>
-      <details><summary>Dados pendentes e hipóteses do modelo</summary><div class="study-summary" id="faultNotes"></div></details></div>`);
+  const fault = create("faultBox", "Curto-circuito · ANSI / IEC", '<div id="shortCircuitWorkbench"></div>', "study-box load-flow-box short-circuit-box");
+  const faultWorkbench = attachShortCircuitWorkbench({ dialog: fault, getDiagram, getScope, networkOptions, setOverlay, onOpen });
   const curveOptions = Object.entries(PROTECTION_CURVES).map(([value, c]) => `<option value="${value}">${c.name}</option>`).join("");
   const profile = (prefix, title, pickup, tms) => `<fieldset class="tcc-profile"><legend>${title}</legend><div class="tcc-fields">
     <label class="wide">Equipamento<select id="${prefix}Device"><option value="">Manual · valores de exemplo</option></select></label>
@@ -51,41 +47,7 @@ export function attachStudyWorkbench({ getDiagram, networkOptions, openPowerFlow
       <div><div class="tcc-key"><span>● A · Jusante</span><span>● B · Montante</span></div>
         <svg class="tcc-chart" id="tccChart" viewBox="0 0 600 440" role="img" aria-label="Curvas tempo corrente em escala logarítmica"></svg>
         <p class="study-note" style="margin:12px 0">Curvas IEC genéricas e tempo definido, com atraso do disjuntor. A margem exibida vale para a corrente escolhida. Esta comparação não inclui tolerâncias de fabricante, saturação de TC ou divisão da corrente entre alimentadores e não certifica seletividade.</p></div></div>`);
-  const cells = (body, values) => {
-    const row = document.createElement("tr");
-    for (const value of values) { const td = document.createElement("td"); td.textContent = String(value); row.append(td); }
-    body.append(row);
-  };
   const format = (v, places = 3) => Number.isFinite(v) ? v.toLocaleString("pt-BR", { minimumFractionDigits: places, maximumFractionDigits: places }) : "—";
-  let lastFault = null, lastFaultSnapshot = "";
-  function runFault() {
-    const d = getDiagram(); lastFault = null; $("applyFault").disabled = true; $("faultRows").replaceChildren();
-    try {
-      const result = calculateThreePhaseFault(d, { ...networkOptions, baseMVA: +$("faultBase").value });
-      const counted = (status) => result.results.filter((b) => b.status === status).length;
-      $("faultSummary").textContent = `${counted("calculated")} barras calculadas · ${counted("dead")} sem fonte · ${counted("missing")} com dados pendentes. Estado atual; nenhuma manobra é executada.`;
-      if (!result.results.length) $("faultSummary").textContent = "Adicione barramentos ao modelo para obter os resultados nas barras.";
-      for (const b of result.results) cells($("faultRows"), [b.name, format(b.kv, 2), format(b.currentKA),
-        format(b.shortCircuitMVA, 1), format(b.resistanceOhm, 5), format(b.reactanceOhm, 5),
-        b.status === "calculated" ? "Calculado" : b.status === "dead" ? "Sem fonte em operação" : "Dados pendentes"]);
-      $("faultNotes").textContent = [...new Set([...result.results.flatMap((b) => b.errors), ...result.warnings])].join("\n") || "Todos os dados necessários foram informados.";
-      lastFault = result; lastFaultSnapshot = JSON.stringify(d);
-      $("applyFault").disabled = !counted("calculated");
-    } catch (e) { $("faultSummary").textContent = "Não foi possível calcular: " + e.message; $("faultNotes").textContent = ""; }
-  }
-  $("runFault").onclick = runFault;
-  $("faultBase").oninput = () => { lastFault = null; $("applyFault").disabled = true;
-    $("faultSummary").textContent = "Potência-base alterada. Calcule novamente para atualizar o relatório."; };
-  $("applyFault").onclick = () => {
-    if (!lastFault || JSON.stringify(getDiagram()) !== lastFaultSnapshot) {
-      $("faultSummary").textContent = "O estado do sistema mudou. Calcule novamente antes de mostrar os resultados."; return;
-    }
-    const values = new Map();
-    for (const b of lastFault.results) for (const id of b.busIds)
-      values.set(id, [b.status === "calculated" ? "3φ · " + format(b.currentKA) + " kA" :
-        b.status === "dead" ? "Sem fonte" : "Dados pendentes"]);
-    setOverlay({ kind: "Curto trifásico", values, snapshot: lastFaultSnapshot }); fault.close();
-  };
   function readProfile(p) {
     return { protectionCurve: $(p + "Curve").value, pickupA: +$(p + "Pickup").value,
       timeMultiplier: +$(p + "Tms").value, definiteTime: +$(p + "Definite").value,
@@ -169,7 +131,7 @@ export function attachStudyWorkbench({ getDiagram, networkOptions, openPowerFlow
   $("runProtection").onclick = runProtection;
   $("tccCurrent").oninput = runProtection;
   $("studyLoadFlow").onclick = () => { hub.close(); onOpen(); openPowerFlow(); };
-  $("studyFault").onclick = () => { hub.close(); open(fault); runFault(); };
+  $("studyFault").onclick = () => { hub.close(); faultWorkbench.open(); };
   $("studyProtection").onclick = () => {
     hub.close();
     for (const p of ["tccA", "tccB"]) {
