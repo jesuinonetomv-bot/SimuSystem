@@ -24,6 +24,17 @@ export function readTheme(storage) {
 }
 export function attachThemeEditor({ dialog, storage = localStorage }) {
   const host = dialog.querySelector("#themeEditor"), status = dialog.querySelector("#themeStatus");
+  const badge = document.getElementById("alarmCount"), acknowledge = document.getElementById("ackAlarm");
+  if (badge && acknowledge) {
+    acknowledge.addEventListener("click", () => {
+      badge.classList.add("acknowledged");
+      badge.title = "Último alarme reconhecido. O contador mantém o total de alarmes.";
+    });
+    // Observe presentation only: a new alarm or a reset restores the alarm color.
+    new MutationObserver(() => {
+      badge.classList.remove("acknowledged"); badge.removeAttribute("title");
+    }).observe(badge, { childList: true });
+  }
   let saved = readTheme(storage), draft = { ...saved };
   const apply = theme => {
     for (const [key, color] of Object.entries(theme)) document.documentElement.style.setProperty("--theme-" + key, color);

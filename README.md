@@ -2,7 +2,7 @@
 
 Protótipo vetorial e responsivo do simulador de manobras do sistema elétrico.
 
-## Casos de estudo e temas (v45)
+## Casos de estudo e temas (v45.1)
 
 Em **Exibição → Tema do unifilar**, selecione ETAP · AC, SimuSystem · clássico
 ou personalize as cores. O padrão AC usa preto para energizado, cinza para

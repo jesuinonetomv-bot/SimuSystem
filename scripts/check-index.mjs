@@ -31,7 +31,7 @@ assert.ok(sw.includes('"./src/session-timeout.js?v=40"'),
 assert.ok(sw.includes('"./src/flow-animation.js?v=41"'),
   "Animated flow must be in the offline asset list");
 for (const name of ["power-flow.js", "study-network.js", "electrical-studies.js", "technical-symbols.js", "study-workbench.js", "workbench.css", "display-theme.js", "load-flow-workbench.js", "study-cases.js", "study-example.js"])
-  assert.ok(sw.includes('"./src/' + name + '?v=45"'), "Missing study asset in offline cache: " + name);
+  assert.ok(sw.includes('"./src/' + name + '?v=45.1"'), "Missing study asset in offline cache: " + name);
 for (const file of ["power-flow.js", "study-network.js", "electrical-studies.js", "study-workbench.js", "study-cases.js", "study-example.js", "load-flow-workbench.js", "display-theme.js"]) {
   const source = readFileSync(new URL("src/" + file, root), "utf8");
   for (const entry of source.matchAll(/from\s+["'](\.\/[^"']+)["']/g)) {

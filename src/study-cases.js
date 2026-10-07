@@ -1,5 +1,5 @@
-import { studyElectricalData } from "./study-network.js?v=45";
-import { solveDiagramPowerFlow } from "./power-flow.js?v=45";
+import { studyElectricalData } from "./study-network.js?v=45.1";
+import { solveDiagramPowerFlow } from "./power-flow.js?v=45.1";
 
 export const CASE_VERSION = 1;
 export const DEFAULT_CASE = {
@@ -98,7 +98,7 @@ export function analyzeStudyAlerts(result, input) {
       v < limits.voltageWarningLow || v > limits.voltageWarningHigh ? "warning" : "normal";
     busStatus.set(b.id, severity);
     if (severity !== "normal") add(severity, "voltage", b.id, b.name,
-      (v < limits.voltageWarningLow ? "Subtensão" : "Sobretensão") + ": " + (v * 100).toFixed(2) + "% da tensão nominal.");
+      (v < limits.voltageWarningLow ? "Subtensão" : "Sobretensão") + ": " + (v * 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "% da tensão nominal.");
   }
   for (const br of result.branches) {
     let loading = null;
@@ -109,14 +109,14 @@ export function analyzeStudyAlerts(result, input) {
     if (loading == null) { pending.push(br.name + ": limite nominal não cadastrado; sobrecarga não avaliada."); continue; }
     const severity = loading >= limits.loadingCritical ? "critical" : loading >= limits.loadingWarning ? "warning" : "normal";
     branchStatus.set(br.itemId, severity);
-    if (severity !== "normal") add(severity, "loading", br.itemId, br.name, "Carregamento: " + loading.toFixed(2) + "% do limite nominal.");
+    if (severity !== "normal") add(severity, "loading", br.itemId, br.name, "Carregamento: " + loading.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "% do limite nominal.");
   }
   for (const s of result.sources || []) {
     if (s.powerMW == null) { pending.push(s.name + ": fontes no mesmo nó; contribuição individual não determinada."); continue; }
     if (s.type === "turbogenerator" && +s.ratedMVA > 0) {
       const loading = Math.hypot(s.powerMW, s.reactiveMvar) / s.ratedMVA * 100;
       if (loading >= limits.loadingWarning) add(loading >= limits.loadingCritical ? "critical" : "warning", "generation", s.id,
-        s.name, "Carregamento do gerador: " + loading.toFixed(2) + "% da potência nominal.");
+        s.name, "Carregamento do gerador: " + loading.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "% da potência nominal.");
     }
     if (s.qMinMvar != null && (s.reactiveMvar < s.qMinMvar - 1e-5 || s.reactiveMvar > s.qMaxMvar + 1e-5))
       add("critical", "reactive", s.id, s.name, "Potência reativa fora dos limites cadastrados.");

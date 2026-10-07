@@ -1,6 +1,6 @@
 import { DEFAULT_CASE, normalizeStudyCase, runStudyCase, loadStudyCases, saveStudyCases,
-  studyReportCSV, studyReportText } from "./study-cases.js?v=45";
-import { exampleStudyDiagram } from "./study-example.js?v=45";
+  studyReportCSV, studyReportText } from "./study-cases.js?v=45.1";
+import { exampleStudyDiagram } from "./study-example.js?v=45.1";
 
 export function attachLoadFlowWorkbench({ dialog, getDiagram, getScope, networkOptions, setOverlay, onOpen }) {
   const $ = id => dialog.querySelector("#" + id), format = (v, digits = 3) => Number.isFinite(v) ?
