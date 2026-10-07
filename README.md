@@ -21,6 +21,66 @@ e as funções de operador e administrador. Precisa de internet e recebe as
 atualizações do site automaticamente. Código, requisitos e instruções de
 compilação estão em [android/README.md](android/README.md).
 
+## Bancada de modelagem, operação e estudos (v44)
+
+Apresentação inspirada em ferramentas de estudos elétricos: fundo claro,
+condutores finos, barramentos destacados, símbolos compactos, TAGs e dados
+nominais em azul, medições em vermelho. A posição dos terminais e as conexões
+existentes são preservadas. Em **Exibição**, escolha medições compactas,
+completas ou ocultas e ligue/desligue os dados nominais. O diagrama continua
+livre de botões sobrepostos.
+
+A navegação superior reúne **Modelagem**, **Operação** e **Estudos**.
+Modelagem exige o acesso de administrador e mantém as ferramentas de
+inserção, conexão e edição. Operação permite iniciar o treinamento e abrir
+faceplates; a troca de administrador para operador passa pelo botão **Sair**.
+Estudos são somente leitura e não concedem acesso a comandos ou edição.
+
+**Fluxo de carga AC:** Newton-Raphson, Gauss-Seidel e desacoplado rápido
+(indicado para redes com X/R alto). O modelo agora reutiliza o grafo de
+terminais das manobras, incluindo contatos abertos e conectores entre abas.
+Não cria uma fonte em ilhas desligadas. Z% dos transformadores é convertido
+para a potência-base do estudo; o tap e a corrente do enrolamento primário
+entram no cálculo das perdas. Geradores têm P/Q prescritos, salvo a fonte de
+referência da ilha; limites reativos ainda não são aplicados. Valores não
+convergidos são identificados e não podem ser aplicados ao unifilar.
+
+**Curto trifásico:** corrente inicial simétrica nas barras pela impedância
+Thevenin de sequência positiva, obtida da inversa da matriz de admitâncias.
+Cadastre o MVA de curto da rede e X/R; para geradores, potência nominal,
+X″d (%) e X/R. A contribuição do gerador usa X″d como reatância. Todas as
+fontes em operação na ilha precisam ter dados válidos. Dados ausentes
+aparecem como pendentes; uma fonte desconhecida não é simplesmente excluída.
+São considerados c = 1 e tensão nominal pré-falta, sem motores, impedância
+de falta, componente contínua ou correções IEC de equipamentos. Não é um
+estudo IEC 60909 completo e não fornece corrente de pico/interrupção.
+
+**Curvas de proteção:** comparação genérica tempo × corrente em escala
+logarítmica. Curvas IEC inversa normal, muito inversa, extremamente inversa
+e tempo definido, com TMS, elemento instantâneo e tempo do disjuntor.
+Os ajustes podem ser manuais (os valores iniciais são exemplos) ou
+cadastrados nos dados elétricos dos disjuntores. A margem é B − A na
+corrente de avaliação, com ambas as correntes primárias referidas ao mesmo
+lado. Não inclui tolerâncias, TC ou divisão de corrente, não certifica
+seletividade da rede e não dispara equipamentos na operação.
+
+Os relatórios indicam hipóteses e dados padrão utilizados. R/X não
+cadastrados numa linha desenhada significam conexão ideal; X/R padrão do
+transformador/fonte é 10 e fica identificado quando não foi salvo.
+**Mostrar no unifilar** aplica as tensões AC ou correntes de curto somente
+à visualização local. Os resultados são retirados quando o estado do modelo
+muda, para não mostrar um cálculo antigo como atual.
+
+Referências dos métodos:
+
+- [Diagrama unifilar e DataBlocks — ETAP](https://etap.com/product/electrical-single-line-diagram)
+- [Curvas IEC inversas — Schneider Electric](https://productinfo.se.com/advc-operationsmanual/pkr39809_advc_operations-manual/English/BM_ADVC3%20Operations%20Manual_0000999204.xml/$/TPC_ADVC3_OM_AppendixDIEC255InverseTimeTablesCPT_0001060607)
+- [Fonte equivalente e corrente de curto — documentação pandapower](https://pandapower.readthedocs.io/en/v3.1.1/shortcircuit/ikss.html)
+
+Esses módulos são para treinamento, com as simplificações acima; não
+representam equivalência ao ETAP nem validação para projeto elétrico.
+A atualização chega ao site e ao APK existente pela versão web.
+
 ## Tela livre e opções de exibição (v43)
 
 O diagrama fica sem botões ou legenda sobre os equipamentos. Na barra

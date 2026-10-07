@@ -1331,11 +1331,12 @@
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
     </style>
+    <link rel="stylesheet" href="./src/workbench.css?v=44" />
   </head>
   <body>
     <header>
       <div class="brand">
-        SimuSystem<small>Workspace de Engenharia e Operação</small>
+        SimuSystem<small>Modelagem · Operação · Estudos</small>
       </div>
       <button class="top" id="logout" hidden title="Encerrar sessão e voltar à visualização">Sair</button>
       <span class="mode" id="mode">Modo de visualização</span>
@@ -1359,6 +1360,12 @@
         Entrar como operador</button
       ><button class="top" id="login">Entrar como administrador</button>
     </header>
+    <nav class="workbench-nav" aria-label="Áreas de trabalho">
+      <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
+      <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
+      <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v44</span>
+    </nav>
     <div class="workspace" id="workspace">
       <aside class="side ribbon">
         <div class="ribbon-tabs">
@@ -1588,7 +1595,7 @@
         </div>
       </aside>
       <section class="wrap">
-        <svg class="stage operator" id="stage" viewBox="0 0 2200 1300"></svg>
+        <svg class="stage operator technical" id="stage" viewBox="0 0 2200 1300"></svg>
         <div class="empty" id="empty">Nenhum diagrama publicado</div>
       </section>
     </div>
@@ -1598,6 +1605,15 @@
         <h2 id="viewSettingsTitle">Exibição</h2>
         <button id="viewSettingsClose" type="button">Fechar</button>
       </div>
+      <section class="view-group">
+        <h3>Dados do unifilar</h3>
+        <div class="data-block-controls">
+          <label><input id="showNameplates" type="checkbox" checked />Mostrar dados nominais em azul</label>
+          <label>Medições do treinamento<select id="dataBlockResults"><option value="compact">Compactas</option><option value="full">Completas</option><option value="off">Ocultas</option></select></label>
+        </div>
+        <p class="hint">Resultados de estudos aparecem em vermelho após “Mostrar no unifilar”.</p>
+        <button id="clearViewStudy" type="button">Limpar resultados do estudo</button>
+      </section>
       <section class="view-group">
         <h3>Zoom</h3>
         <div class="view-zoom" aria-label="Controles de zoom">
@@ -2238,8 +2254,8 @@
                 type="number"
                 step="1"
             /></label>
-            <label class="ef utility"
-              >Potência de curto-circuito (MVA)<input
+            <label class="ef utility bus"
+              >Potência de curto-circuito da fonte (MVA)<input
                 name="shortCircuitMVA"
                 type="number"
                 min="1"
@@ -2267,6 +2283,16 @@
                 min="0"
                 step="0.1"
             /></label>
+            <label class="ef utility turbogenerator bus">Relação X/R da fonte<input name="sourceXR" type="number" min="0.01" step="0.1" /></label>
+            <label class="ef turbogenerator">X″d subtransitória (%; 0 = não informado)<input name="subtransientPercent" type="number" min="0" step="0.1" /></label>
+            <label class="ef transformer">Relação X/R do transformador<input name="transformerXR" type="number" min="0.01" step="0.1" /></label>
+            <label class="ef breaker">Curva de sobrecorrente<select name="protectionCurve"><option value="none">Não cadastrada</option><option value="standard">IEC inversa normal</option><option value="very">IEC muito inversa</option><option value="extreme">IEC extremamente inversa</option><option value="definite">Tempo definido</option></select></label>
+            <label class="ef breaker">Pickup primário (A)<input name="pickupA" type="number" min="0.01" step="1" /></label>
+            <label class="ef breaker">Multiplicador de tempo (TMS)<input name="timeMultiplier" type="number" min="0.001" step="0.01" /></label>
+            <label class="ef breaker">Tempo definido (s)<input name="definiteTime" type="number" min="0.001" step="0.01" /></label>
+            <label class="ef breaker">Pickup instantâneo (A; 0 desliga)<input name="instantaneousA" type="number" min="0" step="1" /></label>
+            <label class="ef breaker">Tempo instantâneo (s)<input name="instantaneousTime" type="number" min="0" step="0.01" /></label>
+            <label class="ef breaker">Tempo de abertura do disjuntor (s)<input name="breakerTime" type="number" min="0" step="0.01" /></label>
             <label class="ef transformer"
               >Potência nominal (MVA)<input
                 name="ratedMVA"
@@ -2480,7 +2506,7 @@
     </dialog>
     <dialog id="powerFlowBox" class="study-box">
       <div class="history-head">
-        <h2>Estudos elétricos — fluxo de carga AC</h2>
+        <h2>Fluxo de carga AC</h2>
         <div class="grow"></div>
         <button
           class="top"
@@ -2496,7 +2522,7 @@
           >Método<select id="powerFlowMethod">
             <option value="newton">Newton-Raphson</option>
             <option value="gauss">Gauss-Seidel</option>
-            <option value="decoupled">Desacoplado rápido</option>
+            <option value="decoupled">Desacoplado rápido (X/R alto)</option>
           </select></label
         ><label
           >Potência-base (MVA)<input
@@ -2524,8 +2550,10 @@
       <div id="powerFlowSummary" class="study-summary">
         Configure os parâmetros e clique em Calcular.
       </div>
+      <div class="study-actions"><button id="applyPowerFlow" type="button" disabled>Mostrar tensões no unifilar</button></div>
+      <p class="study-note">Modelo AC balanceado para treinamento. Transformadores em base comum; linhas sem R/X cadastrados são conexões ideais. Geradores P/Q fixos, salvo a referência da ilha. Sem limites reativos, saturação, harmônicos ou modelo trifásico desequilibrado. As medições e setas da operação continuam usando o modelo de treinamento.</p>
       <div class="study-scroll">
-        <h3>Barras</h3>
+        <h3>Barras / nós elétricos</h3>
         <table class="study-table">
           <thead>
             <tr>
@@ -2582,7 +2610,9 @@
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
-      import { solveDiagramPowerFlow } from "./src/power-flow.js";
+      import { solveDiagramPowerFlow } from "./src/power-flow.js?v=44";
+      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=44";
+      import { attachStudyWorkbench } from "./src/study-workbench.js?v=44";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=41";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
@@ -2606,6 +2636,9 @@
       let flowAnimationEnabled = localStorage.getItem("simuFlowAnimation") === "1";
       $("#flowShowActive").checked = localStorage.getItem("simuFlowActive") !== "0";
       $("#flowShowReactive").checked = localStorage.getItem("simuFlowReactive") !== "0";
+      $("#showNameplates").checked = localStorage.getItem("simuNameplates") !== "0";
+      $("#dataBlockResults").value = ["compact", "full", "off"].includes(localStorage.getItem("simuDataBlocks")) ? localStorage.getItem("simuDataBlocks") : "compact";
+      let studyOverlay = null, lastPowerFlowResult = null, lastPowerFlowSnapshot = "";
       let electricalResults = new Map(),
         eng = false,
         guest = true,
@@ -3671,6 +3704,7 @@
             maxReactiveMvar: 300,
             minReactiveMvar: -300,
             shortCircuitMVA: 5000,
+            sourceXR: 10,
             inertiaSeconds: 8,
             droopPercent: 5,
             dampingMWPerHz: 5,
@@ -3683,6 +3717,7 @@
             secondaryKV: 13.8,
             impedancePercent: 10,
             tapPercent: 0,
+            transformerXR: 10,
           };
         if (o.type === "load")
           return {
@@ -3706,6 +3741,8 @@
             minGenerationMW: 0,
             maxGenerationMW: 35,
             generationStepMW: 0.5,
+            subtransientPercent: 0,
+            sourceXR: 10,
           };
         if (o.type === "line")
           return {
@@ -3714,7 +3751,9 @@
             reactanceOhm: 0.04,
             ampacityA: 1000,
           };
-        if (o.type === "bus") return { ...base, minPU: 0.9, maxPU: 1.1 };
+        if (o.type === "bus") return { ...base, minPU: 0.9, maxPU: 1.1, shortCircuitMVA: 0, sourceXR: 10 };
+        if (o.type === "breaker") return { ...base, protectionCurve: "none", pickupA: 300,
+          timeMultiplier: .1, definiteTime: .5, instantaneousA: 0, instantaneousTime: .02, breakerTime: .06 };
         return base;
       }
       function electricalData(o) {
@@ -4848,13 +4887,21 @@
           ].includes(o.type)
         )
           return;
-        const lines = measurementLines(k, o, true).map((line) =>
-          line.startsWith("Relação V/Hz: ")
-            ? "V/Hz " + line.slice(16)
-            : line.includes(": ")
-              ? line.slice(line.indexOf(": ") + 2)
-              : line,
-        );
+        if (studyOverlay?.values.has(k)) {
+          addStudyMeasurement(g, o, studyOverlay.values.get(k));
+          return;
+        }
+        const style = $("#dataBlockResults").value;
+        if (style === "off") return;
+        let raw = measurementLines(k, o, true);
+        if (style === "compact") {
+          raw = raw.filter(line => /^(Relação:|Tensão:|Corrente:|Potência ativa:|Potência reativa:|Desenergizado)/.test(line));
+          const p = raw.find(line => line.startsWith("Potência ativa:")), q = raw.find(line => line.startsWith("Potência reativa:"));
+          raw = raw.filter(line => !line.startsWith("Potência ativa:") && !line.startsWith("Potência reativa:"));
+          if (p || q) raw.push([p?.replace("Potência ativa: ", "P "), q?.replace("Potência reativa: ", "Q ")].filter(Boolean).join(" · "));
+        }
+        const lines = raw.map((line) => line.startsWith("Relação V/Hz: ") ? "V/Hz " + line.slice(16) :
+          line.includes(": ") ? line.slice(line.indexOf(": ") + 2) : line);
         if (!lines.length) return;
         const base =
             o.type === "bus"
@@ -4873,6 +4920,13 @@
         lines.forEach((line, i) =>
           text.append(E("tspan", { x: p.x, dy: i ? 14 : 0 }, line)),
         );
+        g.append(text);
+      }
+      function addStudyMeasurement(g, o, lines) {
+        const x = (o.type === "bus" ? (o.x1 + o.x2) / 2 : o.x) + (+o.measurementX || 0),
+          y = (o.type === "bus" ? (o.y1 + o.y2) / 2 + 24 : o.y + 55) + (+o.measurementY || 0);
+        const text = E("text", { x, y, class: "measurement study-result", "text-anchor": "middle" });
+        lines.forEach((line, i) => text.append(E("tspan", { x, dy: i ? 14 : 0 }, line)));
         g.append(text);
       }
       function energyMap() {
@@ -5040,6 +5094,15 @@
               o.description,
             ),
           );
+        if ($("#showNameplates").checked) {
+          const e = electricalData(o);
+          let rating = o.type === "transformer" ? e.ratedMVA + " MVA · " + e.primaryKV + "/" + e.secondaryKV + " kV" :
+            o.type === "utility" ? "Rede · " + e.nominalKV + " kV" :
+            o.type === "turbogenerator" ? e.generatorRatedMVA + " MVA · " + e.nominalKV + " kV" :
+            o.type === "load" ? e.activePowerMW + " MW · FP " + e.powerFactor :
+            o.type === "capacitor" ? e.capacitorMvar + " MVAr" : "";
+          if (rating) g.append(E("text", { x: tx, y: ty + fs + 3 + (o.description ? fs + 1 : 0), class: "tag nameplate" }, rating));
+        }
       }
       function conductorGroup(id) {
         return id ? diagram.conductorGroups?.[id] || null : null;
@@ -5657,6 +5720,10 @@
         stage.innerHTML = "";
         const viewDiagram = diagram,
           globalDiagram = globalSimulationDiagram();
+        if (studyOverlay && studyOverlay.snapshot !== JSON.stringify(globalDiagram || diagram)) {
+          studyOverlay = null;
+          $("#status").textContent = "O estado do sistema mudou — recalcule o estudo para atualizar os resultados.";
+        }
         if (globalDiagram) diagram = globalDiagram;
         const study = createSwitchingStudy(diagram, { terminals, electricalData }),
           live = study.energizedItems();
@@ -5698,448 +5765,9 @@
                 : ""),
             "data-id": k,
           });
-          if (o.type === "breaker") {
-            const z = o.scale || 1,
-              r = o.rotation || 0;
-            g.append(
-              E("rect", {
-                x: o.x - 18 * z,
-                y: o.y - 18 * z,
-                width: 36 * z,
-                height: 36 * z,
-                class: "eq",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
-            addLabels(g, o, o.x, o.y, 30 * z);
-            g.append(
-              E("rect", {
-                x: o.x - 24 * z,
-                y: o.y - 24 * z,
-                width: 48 * z,
-                height: 48 * z,
-                class: "sel",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
-          } else if (o.type === "disconnector") {
-            const z = o.scale || 1,
-              r = o.rotation || 0,
-              inner = E("g", {
-                transform:
-                  "translate(" +
-                  o.x +
-                  " " +
-                  o.y +
-                  ") rotate(" +
-                  r +
-                  ") scale(" +
-                  z +
-                  ")",
-              });
-            inner.append(
-              E("line", { x1: 0, y1: -22, x2: 0, y2: -7, class: "wire" }),
-            );
-            inner.append(
-              E("line", { x1: 0, y1: 7, x2: 0, y2: 22, class: "wire" }),
-            );
-            inner.append(
-              E("circle", { cx: 0, cy: -7, r: 3, class: "switch-contact" }),
-            );
-            inner.append(
-              E("circle", { cx: 0, cy: 7, r: 3, class: "switch-contact" }),
-            );
-            inner.append(
-              E("line", {
-                x1: 0,
-                y1: -7,
-                x2: o.state === "closed" ? 0 : 13,
-                y2: 7,
-                class: "switch-blade",
-              }),
-            );
-            g.append(inner);
-            addLabels(g, o, o.x, o.y, 32 * z);
-            g.append(
-              E("rect", {
-                x: o.x - 25 * z,
-                y: o.y - 28 * z,
-                width: 50 * z,
-                height: 56 * z,
-                class: "sel",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
-          } else if (o.type === "transformer") {
-            const z = o.scale || 1,
-              r = o.rotation || 0,
-              inner = E("g", {
-                transform:
-                  "translate(" +
-                  o.x +
-                  " " +
-                  o.y +
-                  ") rotate(" +
-                  r +
-                  ") scale(" +
-                  z +
-                  ")",
-              });
-            inner.append(
-              E("line", { x1: 0, y1: -42, x2: 0, y2: 42, class: "wire" }),
-            );
-            inner.append(
-              E("circle", {
-                cx: 0,
-                cy: -10,
-                r: 18,
-                fill: "none",
-                stroke: "#111",
-                "stroke-width": 3,
-                class: "tf-ring",
-              }),
-            );
-            inner.append(
-              E("circle", {
-                cx: 0,
-                cy: 10,
-                r: 18,
-                fill: "none",
-                stroke: "#111",
-                "stroke-width": 3,
-                class: "tf-ring",
-              }),
-            );
-            g.append(inner);
-            addLabels(g, o, o.x, o.y, 55 * z);
-            g.append(
-              E("rect", {
-                x: o.x - 28 * z,
-                y: o.y - 48 * z,
-                width: 56 * z,
-                height: 96 * z,
-                class: "sel",
-              }),
-            );
-          } else if (o.type === "turbogenerator") {
-            const z = o.scale || 1,
-              r = o.rotation || 0,
-              inner = E("g", {
-                transform:
-                  "translate(" +
-                  o.x +
-                  " " +
-                  o.y +
-                  ") rotate(" +
-                  r +
-                  ") scale(" +
-                  z +
-                  ")",
-              });
-            inner.append(
-              E("line", { x1: 18, y1: -40, x2: 18, y2: -14, class: "wire" }),
-            );
-            inner.append(
-              E("polygon", {
-                points: "-34,-19 5,-8 5,8 -34,19",
-                class: "tg-body",
-              }),
-            );
-            inner.append(
-              E("circle", { cx: 18, cy: 0, r: 11, class: "tg-body" }),
-            );
-            inner.append(
-              E("line", {
-                x1: 5,
-                y1: 0,
-                x2: 7,
-                y2: 0,
-                stroke: "#43807a",
-                "stroke-width": 3,
-              }),
-            );
-            g.append(inner);
-            addLabels(g, o, o.x, o.y, 38 * z);
-            g.append(
-              E("rect", {
-                x: o.x - 42 * z,
-                y: o.y - 46 * z,
-                width: 76 * z,
-                height: 84 * z,
-                class: "sel",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
-          } else if (o.type === "utility") {
-            const z = o.scale || 1,
-              r = o.rotation || 0,
-              inner = E("g", {
-                transform:
-                  "translate(" +
-                  o.x +
-                  " " +
-                  o.y +
-                  ") rotate(" +
-                  r +
-                  ") scale(" +
-                  z +
-                  ")",
-              });
-            inner.append(
-              E("line", { x1: 0, y1: -52, x2: 0, y2: -42, class: "wire" }),
-            );
-            inner.append(
-              E("line", {
-                x1: 0,
-                y1: -42,
-                x2: -22,
-                y2: 24,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: 0,
-                y1: -42,
-                x2: 22,
-                y2: 24,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -22,
-                y1: 24,
-                x2: 22,
-                y2: 24,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -27,
-                y1: -28,
-                x2: 27,
-                y2: -28,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -22,
-                y1: -13,
-                x2: 22,
-                y2: -13,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -16,
-                y1: 2,
-                x2: 16,
-                y2: 2,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -16,
-                y1: -28,
-                x2: 16,
-                y2: -13,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: 16,
-                y1: -28,
-                x2: -16,
-                y2: -13,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -12,
-                y1: -13,
-                x2: 12,
-                y2: 2,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: 12,
-                y1: -13,
-                x2: -12,
-                y2: 2,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -7,
-                y1: 2,
-                x2: 18,
-                y2: 24,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: 7,
-                y1: 2,
-                x2: -18,
-                y2: 24,
-                class: "utility-tower",
-              }),
-            );
-            inner.append(
-              E("circle", { cx: -27, cy: -28, r: 3, class: "utility-body" }),
-            );
-            inner.append(
-              E("circle", { cx: 27, cy: -28, r: 3, class: "utility-body" }),
-            );
-            inner.append(
-              E("circle", { cx: -22, cy: -13, r: 3, class: "utility-body" }),
-            );
-            inner.append(
-              E("circle", { cx: 22, cy: -13, r: 3, class: "utility-body" }),
-            );
-            g.append(inner);
-            addLabels(g, o, o.x, o.y, 48 * z);
-            g.append(
-              E("rect", {
-                x: o.x - 34 * z,
-                y: o.y - 58 * z,
-                width: 68 * z,
-                height: 88 * z,
-                class: "sel",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
-          } else if (o.type === "capacitor") {
-            const z = o.scale || 1,
-              r = o.rotation || 0,
-              inner = E("g", {
-                transform:
-                  "translate(" +
-                  o.x +
-                  " " +
-                  o.y +
-                  ") rotate(" +
-                  r +
-                  ") scale(" +
-                  z +
-                  ")",
-              });
-            inner.append(
-              E("line", { x1: 0, y1: -34, x2: 0, y2: -10, class: "wire" }),
-            );
-            inner.append(
-              E("line", {
-                x1: -18,
-                y1: -10,
-                x2: 18,
-                y2: -10,
-                class: "capacitor-plate",
-              }),
-            );
-            inner.append(
-              E("line", {
-                x1: -18,
-                y1: -3,
-                x2: 18,
-                y2: -3,
-                class: "capacitor-plate",
-              }),
-            );
-            inner.append(
-              E("line", { x1: 0, y1: -3, x2: 0, y2: 18, class: "wire" }),
-            );
-            g.append(inner);
-            g.classList.add(
-              (o.activeStages ?? 1) > 0
-                ? "capacitor-active"
-                : "capacitor-inactive",
-            );
-            addLabels(g, o, o.x, o.y, 34 * z);
-            g.append(
-              E("rect", {
-                x: o.x - 25 * z,
-                y: o.y - 40 * z,
-                width: 50 * z,
-                height: 65 * z,
-                fill: "transparent",
-                stroke: "none",
-                class: "capacitor-hit-target",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
-            g.append(
-              E("rect", {
-                x: o.x - 25 * z,
-                y: o.y - 40 * z,
-                width: 50 * z,
-                height: 65 * z,
-                class: "sel",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
-          } else if (o.type === "load") {
-            const z = o.scale || 1,
-              r = o.rotation || 0,
-              inner = E("g", {
-                transform:
-                  "translate(" +
-                  o.x +
-                  " " +
-                  o.y +
-                  ") rotate(" +
-                  r +
-                  ") scale(" +
-                  z +
-                  ")",
-              });
-            inner.append(
-              E("line", { x1: 0, y1: -34, x2: 0, y2: -18, class: "wire" }),
-            );
-            inner.append(
-              E("polygon", {
-                points: "-18,-18 18,-18 0,18",
-                class: "load-body",
-              }),
-            );
-            inner.append(
-              E(
-                "text",
-                {
-                  x: 0,
-                  y: -1,
-                  "text-anchor": "middle",
-                  "font-size": 10,
-                  "font-weight": "800",
-                },
-                o.state === "active" ? "ON" : "OFF",
-              ),
-            );
-            g.append(inner);
-            g.classList.add(
-              o.state === "active" ? "load-active" : "load-inactive",
-            );
-            addLabels(g, o, o.x, o.y, 34 * z);
-            g.append(
-              E("rect", {
-                x: o.x - 25 * z,
-                y: o.y - 40 * z,
-                width: 50 * z,
-                height: 65 * z,
-                class: "sel",
-                transform: "rotate(" + r + " " + o.x + " " + o.y + ")",
-              }),
-            );
+          if (renderTechnicalSymbol(g, o, E)) {
+            const labelDistance = { utility: 62, transformer: 58, turbogenerator: 52, load: 50, capacitor: 50 }[o.type] || 36;
+            addLabels(g, o, o.x, o.y, labelDistance * (o.scale || 1));
           } else if (o.type === "annotationLine") {
             g.append(
               E("line", {
@@ -7329,7 +6957,8 @@
         "shortCircuitMVA",
         "inertiaSeconds",
         "droopPercent",
-        "dampingMWPerHz",
+        "dampingMWPerHz", "sourceXR", "subtransientPercent", "transformerXR",
+        "protectionCurve", "pickupA", "timeMultiplier", "definiteTime", "instantaneousA", "instantaneousTime", "breakerTime",
       ];
       function openElectrical() {
         const o = diagram.items[selected];
@@ -7874,11 +7503,14 @@
           branchBody = $("#powerFlowBranchBody");
         busBody.innerHTML = "";
         branchBody.innerHTML = "";
+        lastPowerFlowResult = null;
+        $("#applyPowerFlow").disabled = true;
         try {
-          const result = solveDiagramPowerFlow(diagram, {
+          const network = globalSimulationDiagram() || diagram;
+          const result = solveDiagramPowerFlow(network, { terminals, electricalData,
             method: $("#powerFlowMethod").value,
-            baseMVA: +$("#powerFlowBase").value || 100,
-            tolerance: +$("#powerFlowTolerance").value || 1e-6,
+            baseMVA: +$("#powerFlowBase").value,
+            tolerance: +$("#powerFlowTolerance").value,
           });
           summary.textContent =
             "Método: " +
@@ -7893,7 +7525,11 @@
             result.totalLossMW.toFixed(4) +
             " MW\nPerdas reativas: " +
             result.totalLossMvar.toFixed(4) +
-            " MVAr";
+            " MVAr" + (result.notCalculated.length ? "\nTrechos não calculados: " + result.notCalculated.filter(x => x.names.length).map(x => x.names.join(", ") + " — " + x.reason).join("; ") : "") +
+            (result.warnings.length ? "\nHipóteses: " + result.warnings.join("; ") : "");
+          lastPowerFlowResult = result;
+          lastPowerFlowSnapshot = JSON.stringify(network);
+          $("#applyPowerFlow").disabled = !result.converged;
           for (const b of result.buses) {
             const tr = document.createElement("tr");
             [
@@ -7912,7 +7548,7 @@
               from = result.buses[b.from]?.name || "B" + (b.from + 1),
               to = result.buses[b.to]?.name || "B" + (b.to + 1);
             [
-              (b.type === "transformer" ? "TF " : "Linha ") + (i + 1),
+              b.name || (b.type === "transformer" ? "TF " : "Linha ") + (i + 1),
               from,
               to,
               b.pFromMW.toFixed(3),
@@ -7926,12 +7562,61 @@
           summary.textContent = "Não foi possível calcular: " + error.message;
         }
       }
+      function updateWorkbenchNav() {
+        const studiesOpen = ["studiesBox", "faultBox", "protectionBox", "powerFlowBox"].some(id => document.getElementById(id)?.open);
+        $("#workModel").classList.toggle("active", eng && !studiesOpen);
+        $("#workOperation").classList.toggle("active", !eng && !studiesOpen);
+        $("#workStudies").classList.toggle("active", studiesOpen);
+        $("#workOperation").disabled = eng;
+        $("#workOperation").title = eng ? "Use Sair para encerrar a engenharia e iniciar uma sessão de operador" : "Visualizar o sistema ou iniciar treinamento como operador";
+      }
+      function setStudyOverlay(value) {
+        studyOverlay = value;
+        draw(false);
+        $("#status").textContent = value ? value.kind + " · resultados calculados no unifilar; recalcule após mudar o sistema." : "Resultados do estudo removidos do unifilar.";
+      }
+      const workbench = attachStudyWorkbench({
+        getDiagram: () => globalSimulationDiagram() || diagram,
+        networkOptions: { terminals, electricalData },
+        openPowerFlow: () => $("#powerFlowBtn").onclick(),
+        setOverlay: setStudyOverlay,
+        onOpen: () => { $("#workStudies").classList.add("active"); $("#workModel").classList.remove("active"); $("#workOperation").classList.remove("active"); },
+        onClose: () => updateWorkbenchNav(),
+      });
+      $("#workStudies").onclick = () => workbench.open();
+      $("#workModel").onclick = () => {
+        if (!eng) $("#login").onclick();
+        else { choose("select"); $("#status").textContent = "Modelagem — selecione um equipamento para editar seus dados elétricos e conexões."; }
+      };
+      $("#workOperation").onclick = () => {
+        if (!eng && !operatorSession) $("#operatorLoginBtn").onclick();
+        else $("#status").textContent = "Operação — clique ou toque sem arrastar para abrir o faceplate.";
+      };
+      $("#powerFlowBox").addEventListener("close", updateWorkbenchNav);
+      $("#applyPowerFlow").onclick = () => {
+        if (!lastPowerFlowResult?.converged || JSON.stringify(globalSimulationDiagram() || diagram) !== lastPowerFlowSnapshot) {
+          $("#powerFlowSummary").textContent = "O estado do sistema mudou. Calcule novamente antes de mostrar as tensões."; return;
+        }
+        const values = new Map();
+        for (const b of lastPowerFlowResult.buses) for (const id of b.busIds)
+          values.set(id, ["AC · " + b.voltagePU.toFixed(4) + " pu", (b.kv * b.voltagePU).toFixed(2) + " kV · " + b.angleDeg.toFixed(2) + "°"]);
+        setStudyOverlay({ kind: "Fluxo de carga AC", values, snapshot: lastPowerFlowSnapshot });
+        $("#powerFlowBox").close();
+      };
+      $("#showNameplates").onchange = () => { localStorage.setItem("simuNameplates", $("#showNameplates").checked ? "1" : "0"); draw(false); };
+      $("#dataBlockResults").onchange = () => { localStorage.setItem("simuDataBlocks", $("#dataBlockResults").value); draw(false); };
+      $("#clearViewStudy").onclick = () => setStudyOverlay(null);
       $("#powerFlowBtn").onclick = () => {
         $("#powerFlowBox").showModal();
+        updateWorkbenchNav();
         runPowerFlowStudy();
       };
       $("#powerFlowClose").onclick = () => $("#powerFlowBox").close();
       $("#runPowerFlow").onclick = runPowerFlowStudy;
+      for (const id of ["powerFlowMethod", "powerFlowBase", "powerFlowTolerance"]) document.getElementById(id).addEventListener("input", () => {
+        lastPowerFlowResult = null; $("#applyPowerFlow").disabled = true;
+        $("#powerFlowSummary").textContent = "Parâmetros alterados. Calcule novamente para atualizar o relatório.";
+      });
       $("#viewSettingsBtn").onclick = () => $("#viewSettingsBox").showModal();
       $("#viewSettingsClose").onclick = () => $("#viewSettingsBox").close();
       $("#flowAnimationBtn").onclick = () => {
@@ -8739,6 +8424,7 @@
         if (!on && !operatorSession) timeEngine.pause();
         if (!on && $("#controlBox").open) $("#controlBox").close();
         updateTimeControls();
+        updateWorkbenchNav();
       }
       $("#diagramSelect").onchange = async (event) => {
         await switchDiagram(event.target.value);
