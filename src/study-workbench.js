@@ -1,4 +1,4 @@
-import { calculateThreePhaseFault, PROTECTION_CURVES, protectionTime, compareProtection } from "./electrical-studies.js?v=44";
+import { calculateThreePhaseFault, PROTECTION_CURVES, protectionTime, compareProtection } from "./electrical-studies.js?v=44.1";
 
 export function attachStudyWorkbench({ getDiagram, networkOptions, openPowerFlow, setOverlay, onOpen, onClose }) {
   const $ = (id) => document.getElementById(id);

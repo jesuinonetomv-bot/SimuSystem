@@ -1331,7 +1331,7 @@
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
     </style>
-    <link rel="stylesheet" href="./src/workbench.css?v=44" />
+    <link rel="stylesheet" href="./src/workbench.css?v=44.1" />
   </head>
   <body>
     <header>
@@ -1608,7 +1608,7 @@
       <section class="view-group">
         <h3>Dados do unifilar</h3>
         <div class="data-block-controls">
-          <label><input id="showNameplates" type="checkbox" checked />Mostrar dados nominais em azul</label>
+          <label><input id="showNameplates" type="checkbox" checked />Mostrar dados nominais de fontes e transformadores</label>
           <label>Medições do treinamento<select id="dataBlockResults"><option value="compact">Compactas</option><option value="full">Completas</option><option value="off">Ocultas</option></select></label>
         </div>
         <p class="hint">Resultados de estudos aparecem em vermelho após “Mostrar no unifilar”.</p>
@@ -2610,9 +2610,9 @@
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
-      import { solveDiagramPowerFlow } from "./src/power-flow.js?v=44";
-      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=44";
-      import { attachStudyWorkbench } from "./src/study-workbench.js?v=44";
+      import { solveDiagramPowerFlow } from "./src/power-flow.js?v=44.1";
+      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=44.1";
+      import { attachStudyWorkbench } from "./src/study-workbench.js?v=44.1";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=41";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
@@ -5099,8 +5099,7 @@
           let rating = o.type === "transformer" ? e.ratedMVA + " MVA · " + e.primaryKV + "/" + e.secondaryKV + " kV" :
             o.type === "utility" ? "Rede · " + e.nominalKV + " kV" :
             o.type === "turbogenerator" ? e.generatorRatedMVA + " MVA · " + e.nominalKV + " kV" :
-            o.type === "load" ? e.activePowerMW + " MW · FP " + e.powerFactor :
-            o.type === "capacitor" ? e.capacitorMvar + " MVAr" : "";
+            "";
           if (rating) g.append(E("text", { x: tx, y: ty + fs + 3 + (o.description ? fs + 1 : 0), class: "tag nameplate" }, rating));
         }
       }
@@ -5159,6 +5158,8 @@
               code && activeCodes.has(code)
                 ? "global::" + code
                 : prefix + "group::" + groupId;
+            if (!merged.conductorGroups[groupIds[groupId]])
+              merged.conductorGroups[groupIds[groupId]] = JSON.parse(JSON.stringify(group));
           }
           for (const [itemId, source] of Object.entries(data.items || {})) {
             const item = JSON.parse(JSON.stringify(source)),
@@ -5878,7 +5879,7 @@
               }),
             );
           }
-          if (o.isSource)
+          if (o.isSource && !["utility", "turbogenerator"].includes(o.type))
             g.append(
               E("circle", {
                 cx: (o.x ?? o.x1) + 10,

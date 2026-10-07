@@ -26,5 +26,5 @@ assert.ok(sw.includes('"./src/session-timeout.js?v=40"'),
 assert.ok(sw.includes('"./src/flow-animation.js?v=41"'),
   "Animated flow must be in the offline asset list");
 for (const name of ["power-flow.js", "study-network.js", "electrical-studies.js", "technical-symbols.js", "study-workbench.js", "workbench.css"])
-  assert.ok(sw.includes('"./src/' + name + '?v=44"'), "Missing study asset in offline cache: " + name);
+  assert.ok(sw.includes('"./src/' + name + '?v=44.1"'), "Missing study asset in offline cache: " + name);
 console.log("Application syntax, module paths, command/alarm controls and offline asset list OK");

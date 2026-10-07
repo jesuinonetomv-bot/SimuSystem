@@ -23,6 +23,15 @@ export function buildStudyNetwork(diagram, options = {}) {
   const electricalData = options.electricalData || studyElectricalData;
   const graph = createSwitchingStudy(diagram, { ...options, electricalData }).network();
   const { items, ports, points, edges, sources } = graph;
+  const typeNames = { bus: "Barra", line: "Linha", breaker: "Disjuntor", disconnector: "Seccionadora",
+    transformer: "Transformador", utility: "Rede", turbogenerator: "Gerador", load: "Carga", capacitor: "Capacitor" };
+  const counters = {}, labels = new Map();
+  for (const [id, o] of Object.entries(items)) {
+    counters[o.type] = (counters[o.type] || 0) + 1;
+    labels.set(id, o.name || diagram.conductorGroups?.[o.conductorGroupId]?.name ||
+      (typeNames[o.type] || "Equipamento") + " " + counters[o.type]);
+  }
+  const name = (id) => labels.get(id) || "Equipamento sem referência";
   const parent = new Map([...points.keys()].map((key) => [key, key]));
   function root(key) {
     const p = parent.get(key);
@@ -48,11 +57,10 @@ export function buildStudyNetwork(diagram, options = {}) {
       b.itemIds.push(id);
       if (o.type === "bus") {
         b.busIds.push(id);
-        if (!named.has(index)) { b.name = o.name || id; named.add(index); }
+        if (!named.has(index)) { b.name = name(id); named.add(index); }
       }
     }
   }
-  const name = (id) => items[id]?.name || id;
   const error = (id, text) => {
     for (const index of nodesOfItem.get(id) || []) buses[index].errors.push(name(id) + ": " + text);
   };
@@ -127,7 +135,6 @@ export function buildStudyNetwork(diagram, options = {}) {
   }
   const idealLines = new Set(edges.filter((e) => items[e.id]?.type === "line" &&
     e.known && !e.hasImpedance && e.modelDefault).map((e) => e.id));
-  for (const id of idealLines) warn(id, "conexão ideal; R/X não cadastrados");
   const sourceData = [];
   for (const [id, ps] of ports) {
     const o = items[id], e = electricalData(o), b = buses[at(ps[0])];
@@ -179,9 +186,11 @@ export function buildStudyNetwork(diagram, options = {}) {
       buses[first.bus].v = positive(first.data.voltageSetpointPU) ? +first.data.voltageSetpointPU : 1;
       buses[first.bus].warnings.push(first.name + ": gerador usado como referência de tensão e balanço P/Q");
     }
+    const idealCount = [...idealLines].filter(id => (nodesOfItem.get(id) || []).some(i => ids.includes(i))).length;
     islands.push({ ids, sourceIds,
       errors: [...new Set([...unlocatedErrors, ...ids.flatMap((i) => buses[i].errors)])],
-      warnings: [...new Set(ids.flatMap((i) => buses[i].warnings))] });
+      warnings: [...new Set([...ids.flatMap((i) => buses[i].warnings),
+        ...(idealCount ? [idealCount + " conexões ideais; R/X não cadastrados"] : [])])] });
   }
   return { baseMVA: +baseMVA, buses, branches, busOfItem, nodesOfItem, sourceData, islands, items };
 }

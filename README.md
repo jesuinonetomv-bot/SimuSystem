@@ -27,7 +27,7 @@ Apresentação inspirada em ferramentas de estudos elétricos: fundo claro,
 condutores finos, barramentos destacados, símbolos compactos, TAGs e dados
 nominais em azul, medições em vermelho. A posição dos terminais e as conexões
 existentes são preservadas. Em **Exibição**, escolha medições compactas,
-completas ou ocultas e ligue/desligue os dados nominais. O diagrama continua
+completas ou ocultas e ligue/desligue os dados nominais de fontes e transformadores. O diagrama continua
 livre de botões sobrepostos.
 
 A navegação superior reúne **Modelagem**, **Operação** e **Estudos**.
