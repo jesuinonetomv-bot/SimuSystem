@@ -1331,7 +1331,7 @@
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
     </style>
-    <link rel="stylesheet" href="./src/workbench.css?v=44.1" />
+    <link rel="stylesheet" href="./src/workbench.css?v=45" />
   </head>
   <body>
     <header>
@@ -1364,7 +1364,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v44</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v45</span>
     </nav>
     <div class="workspace" id="workspace">
       <aside class="side ribbon">
@@ -1605,13 +1605,19 @@
         <h2 id="viewSettingsTitle">Exibição</h2>
         <button id="viewSettingsClose" type="button">Fechar</button>
       </div>
+      <section class="view-group"><h3>Tema do unifilar</h3>
+        <label class="theme-preset">Padrão de cores<select id="themePreset"><option value="etap">ETAP · AC</option><option value="classic">SimuSystem · clássico</option><option value="custom">Personalizado</option></select></label>
+        <details class="theme-details"><summary>Personalizar cores</summary><div class="theme-grid" id="themeEditor"></div></details>
+        <div class="case-buttons"><button id="saveTheme" type="button">Salvar tema</button><button id="cancelTheme" type="button">Restaurar cores salvas</button></div>
+        <p class="hint" id="themeStatus" role="status">As cores salvas valem neste aparelho.</p>
+      </section>
       <section class="view-group">
         <h3>Dados do unifilar</h3>
         <div class="data-block-controls">
           <label><input id="showNameplates" type="checkbox" checked />Mostrar dados nominais de fontes e transformadores</label>
           <label>Medições do treinamento<select id="dataBlockResults"><option value="compact">Compactas</option><option value="full">Completas</option><option value="off">Ocultas</option></select></label>
         </div>
-        <p class="hint">Resultados de estudos aparecem em vermelho após “Mostrar no unifilar”.</p>
+        <p class="hint">Resultados de estudos usam a cor configurada no tema após “Mostrar no unifilar”.</p>
         <button id="clearViewStudy" type="button">Limpar resultados do estudo</button>
       </section>
       <section class="view-group">
@@ -1626,8 +1632,12 @@
       <section class="view-group">
         <h3>Legenda</h3>
         <div class="legend">
-          <span><span class="dot red"></span> Fechado</span>
-          <span><span class="dot green"></span> Aberto</span>
+          <span><span class="dot" data-theme-swatch="closed"></span> Fechado</span>
+          <span><span class="dot" data-theme-swatch="open"></span> Aberto</span>
+          <span><span class="dot" data-theme-swatch="energized"></span> Energizado</span>
+          <span><span class="dot" data-theme-swatch="deenergized"></span> Desenergizado</span>
+          <span><span class="dot" data-theme-swatch="warning"></span> Atenção</span>
+          <span><span class="dot" data-theme-swatch="alarm"></span> Alarme</span>
         </div>
       </section>
       <section class="view-group">
@@ -2208,7 +2218,7 @@
                 min="1"
                 step="1"
             /></label>
-            <label class="ef utility"
+            <label class="ef utility turbogenerator"
               >Tensão de referência (pu)<input
                 name="voltageSetpointPU"
                 type="number"
@@ -2402,6 +2412,9 @@
                 min="0.1"
                 step="0.1"
             /></label>
+            <label class="ef turbogenerator">Modo no fluxo de carga<select name="studyGeneratorMode"><option value="auto">Auto</option><option value="pq">PQ · P/Q fixos</option><option value="pv">PV · controle de tensão</option><option value="slack">Referência da ilha</option></select></label>
+            <label class="ef turbogenerator">Q mínimo no estudo (MVAr; opcional)<input name="studyQMinMvar" type="number" step="0.1"></label>
+            <label class="ef turbogenerator">Q máximo no estudo (MVAr; opcional)<input name="studyQMaxMvar" type="number" step="0.1"></label>
             <label class="ef turbogenerator"
               >Geração ativa programada (MW)<input
                 name="generationMW"
@@ -2504,86 +2517,10 @@
         </div>
       </form>
     </dialog>
-    <dialog id="powerFlowBox" class="study-box">
-      <div class="history-head">
-        <h2>Fluxo de carga AC</h2>
-        <div class="grow"></div>
-        <button
-          class="top"
-          type="button"
-          id="powerFlowClose"
-          style="color: #24323d; background: #eef2f4"
-        >
-          Fechar
-        </button>
-      </div>
-      <div class="study-controls">
-        <label
-          >Método<select id="powerFlowMethod">
-            <option value="newton">Newton-Raphson</option>
-            <option value="gauss">Gauss-Seidel</option>
-            <option value="decoupled">Desacoplado rápido (X/R alto)</option>
-          </select></label
-        ><label
-          >Potência-base (MVA)<input
-            id="powerFlowBase"
-            type="number"
-            min="1"
-            step="1"
-            value="100" /></label
-        ><label
-          >Tolerância<input
-            id="powerFlowTolerance"
-            type="number"
-            min="0.000000001"
-            step="0.000001"
-            value="0.000001" /></label
-        ><button
-          class="ok"
-          type="button"
-          id="runPowerFlow"
-          style="padding: 9px 16px; border: 0; border-radius: 7px"
-        >
-          Calcular
-        </button>
-      </div>
-      <div id="powerFlowSummary" class="study-summary">
-        Configure os parâmetros e clique em Calcular.
-      </div>
-      <div class="study-actions"><button id="applyPowerFlow" type="button" disabled>Mostrar tensões no unifilar</button></div>
-      <p class="study-note">Modelo AC balanceado para treinamento. Transformadores em base comum; linhas sem R/X cadastrados são conexões ideais. Geradores P/Q fixos, salvo a referência da ilha. Sem limites reativos, saturação, harmônicos ou modelo trifásico desequilibrado. As medições e setas da operação continuam usando o modelo de treinamento.</p>
-      <div class="study-scroll">
-        <h3>Barras / nós elétricos</h3>
-        <table class="study-table">
-          <thead>
-            <tr>
-              <th>Barra</th>
-              <th>Tipo</th>
-              <th>kV</th>
-              <th>V (pu)</th>
-              <th>Ângulo (°)</th>
-              <th>P (MW)</th>
-              <th>Q (MVAr)</th>
-            </tr>
-          </thead>
-          <tbody id="powerFlowBusBody"></tbody>
-        </table>
-        <h3>Ramos</h3>
-        <table class="study-table">
-          <thead>
-            <tr>
-              <th>Ramo</th>
-              <th>De</th>
-              <th>Para</th>
-              <th>P (MW)</th>
-              <th>Q (MVAr)</th>
-              <th>Corrente (A)</th>
-              <th>Perda (MW)</th>
-            </tr>
-          </thead>
-          <tbody id="powerFlowBranchBody"></tbody>
-        </table>
-      </div>
+    <dialog id="powerFlowBox" class="study-box load-flow-box" aria-labelledby="powerFlowTitle">
+      <div class="history-head"><h2 id="powerFlowTitle">Fluxo de carga · Caso de estudo</h2><div class="grow"></div>
+        <button class="top" type="button" id="powerFlowClose" style="color:#24323d;background:#eef2f4">Fechar</button></div>
+      <div id="loadFlowWorkbench"></div>
     </dialog>
     <dialog id="alarmBox" class="alarm-box">
       <div class="alarm-head" id="alarmHead">⚠ ALARME DE MANOBRA ERRADA</div>
@@ -2610,9 +2547,10 @@
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
-      import { solveDiagramPowerFlow } from "./src/power-flow.js?v=44.1";
-      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=44.1";
-      import { attachStudyWorkbench } from "./src/study-workbench.js?v=44.1";
+      import { attachLoadFlowWorkbench } from "./src/load-flow-workbench.js?v=45";
+      import { attachThemeEditor } from "./src/display-theme.js?v=45";
+      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=45";
+      import { attachStudyWorkbench } from "./src/study-workbench.js?v=45";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=41";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
@@ -2638,7 +2576,7 @@
       $("#flowShowReactive").checked = localStorage.getItem("simuFlowReactive") !== "0";
       $("#showNameplates").checked = localStorage.getItem("simuNameplates") !== "0";
       $("#dataBlockResults").value = ["compact", "full", "off"].includes(localStorage.getItem("simuDataBlocks")) ? localStorage.getItem("simuDataBlocks") : "compact";
-      let studyOverlay = null, lastPowerFlowResult = null, lastPowerFlowSnapshot = "";
+      let studyOverlay = null;
       let electricalResults = new Map(),
         eng = false,
         guest = true,
@@ -3741,6 +3679,7 @@
             minGenerationMW: 0,
             maxGenerationMW: 35,
             generationStepMW: 0.5,
+            studyGeneratorMode: "auto", voltageSetpointPU: 1,
             subtransientPercent: 0,
             sourceXR: 10,
           };
@@ -4876,21 +4815,10 @@
         return measurementLines(k, o, false).join("\n");
       }
       function addMeasurement(g, k, o) {
-        if (
-          (eng && selected !== k) ||
-          ![
-            "bus",
-            "transformer",
-            "turbogenerator",
-            "load",
-            "capacitor",
-          ].includes(o.type)
-        )
-          return;
         if (studyOverlay?.values.has(k)) {
-          addStudyMeasurement(g, o, studyOverlay.values.get(k));
-          return;
+          addStudyMeasurement(g, o, studyOverlay.values.get(k)); return;
         }
+        if ((eng && selected !== k) || !["bus", "transformer", "turbogenerator", "load", "capacitor"].includes(o.type)) return;
         const style = $("#dataBlockResults").value;
         if (style === "off") return;
         let raw = measurementLines(k, o, true);
@@ -4923,8 +4851,8 @@
         g.append(text);
       }
       function addStudyMeasurement(g, o, lines) {
-        const x = (o.type === "bus" ? (o.x1 + o.x2) / 2 : o.x) + (+o.measurementX || 0),
-          y = (o.type === "bus" ? (o.y1 + o.y2) / 2 + 24 : o.y + 55) + (+o.measurementY || 0);
+        const x = (["bus", "line"].includes(o.type) ? (o.x1 + o.x2) / 2 : o.x) + (+o.measurementX || 0),
+          y = (["bus", "line"].includes(o.type) ? (o.y1 + o.y2) / 2 + 24 : o.y + 55) + (+o.measurementY || 0);
         const text = E("text", { x, y, class: "measurement study-result", "text-anchor": "middle" });
         lines.forEach((line, i) => text.append(E("tspan", { x, dy: i ? 14 : 0 }, line)));
         g.append(text);
@@ -5763,7 +5691,8 @@
               (electricalResults.get(k)?.loadingPercent > 100 ||
                 (electricalResults.get(k)?.overfluxPercent || 0) > 110)
                 ? " overload"
-                : ""),
+                : "") +
+              (studyOverlay?.severity?.get(k) ? " study-" + studyOverlay.severity.get(k) : ""),
             "data-id": k,
           });
           if (renderTechnicalSymbol(g, o, E)) {
@@ -6959,6 +6888,7 @@
         "inertiaSeconds",
         "droopPercent",
         "dampingMWPerHz", "sourceXR", "subtransientPercent", "transformerXR",
+        "studyGeneratorMode", "studyQMinMvar", "studyQMaxMvar",
         "protectionCurve", "pickupA", "timeMultiplier", "definiteTime", "instantaneousA", "instantaneousTime", "breakerTime",
       ];
       function openElectrical() {
@@ -7493,76 +7423,6 @@
         $("#mode").textContent = "Control Building";
         $("#controlBox").showModal();
       }
-      function studyCell(tr, value) {
-        const td = document.createElement("td");
-        td.textContent = String(value);
-        tr.append(td);
-      }
-      function runPowerFlowStudy() {
-        const summary = $("#powerFlowSummary"),
-          busBody = $("#powerFlowBusBody"),
-          branchBody = $("#powerFlowBranchBody");
-        busBody.innerHTML = "";
-        branchBody.innerHTML = "";
-        lastPowerFlowResult = null;
-        $("#applyPowerFlow").disabled = true;
-        try {
-          const network = globalSimulationDiagram() || diagram;
-          const result = solveDiagramPowerFlow(network, { terminals, electricalData,
-            method: $("#powerFlowMethod").value,
-            baseMVA: +$("#powerFlowBase").value,
-            tolerance: +$("#powerFlowTolerance").value,
-          });
-          summary.textContent =
-            "Método: " +
-            result.method +
-            "\nConvergência: " +
-            (result.converged ? "Sim" : "Não") +
-            "\nIterações: " +
-            result.iterations +
-            "\nIlhas calculadas: " +
-            result.islandCount +
-            "\nPerdas ativas: " +
-            result.totalLossMW.toFixed(4) +
-            " MW\nPerdas reativas: " +
-            result.totalLossMvar.toFixed(4) +
-            " MVAr" + (result.notCalculated.length ? "\nTrechos não calculados: " + result.notCalculated.filter(x => x.names.length).map(x => x.names.join(", ") + " — " + x.reason).join("; ") : "") +
-            (result.warnings.length ? "\nHipóteses: " + result.warnings.join("; ") : "");
-          lastPowerFlowResult = result;
-          lastPowerFlowSnapshot = JSON.stringify(network);
-          $("#applyPowerFlow").disabled = !result.converged;
-          for (const b of result.buses) {
-            const tr = document.createElement("tr");
-            [
-              b.name || "B" + (b.id + 1),
-              b.type,
-              b.kv.toFixed(2),
-              b.voltagePU.toFixed(5),
-              b.angleDeg.toFixed(4),
-              b.pCalculatedMW.toFixed(3),
-              b.qCalculatedMvar.toFixed(3),
-            ].forEach((v) => studyCell(tr, v));
-            busBody.append(tr);
-          }
-          for (const [i, b] of result.branches.entries()) {
-            const tr = document.createElement("tr"),
-              from = result.buses[b.from]?.name || "B" + (b.from + 1),
-              to = result.buses[b.to]?.name || "B" + (b.to + 1);
-            [
-              b.name || (b.type === "transformer" ? "TF " : "Linha ") + (i + 1),
-              from,
-              to,
-              b.pFromMW.toFixed(3),
-              b.qFromMvar.toFixed(3),
-              b.currentA.toFixed(1),
-              b.lossMW.toFixed(4),
-            ].forEach((v) => studyCell(tr, v));
-            branchBody.append(tr);
-          }
-        } catch (error) {
-          summary.textContent = "Não foi possível calcular: " + error.message;
-        }
-      }
       function updateWorkbenchNav() {
         const studiesOpen = ["studiesBox", "faultBox", "protectionBox", "powerFlowBox"].some(id => document.getElementById(id)?.open);
         $("#workModel").classList.toggle("active", eng && !studiesOpen);
@@ -7576,6 +7436,12 @@
         draw(false);
         $("#status").textContent = value ? value.kind + " · resultados calculados no unifilar; recalcule após mudar o sistema." : "Resultados do estudo removidos do unifilar.";
       }
+      const loadFlowWorkbench = attachLoadFlowWorkbench({
+        dialog: $("#powerFlowBox"), getDiagram: () => globalSimulationDiagram() || diagram,
+        getScope: () => currentDiagramId, networkOptions: { terminals, electricalData },
+        setOverlay: setStudyOverlay, onOpen: () => { $("#workStudies").classList.add("active"); $("#workModel").classList.remove("active"); $("#workOperation").classList.remove("active"); },
+      });
+      attachThemeEditor({ dialog: $("#viewSettingsBox") });
       const workbench = attachStudyWorkbench({
         getDiagram: () => globalSimulationDiagram() || diagram,
         networkOptions: { terminals, electricalData },
@@ -7594,30 +7460,11 @@
         else $("#status").textContent = "Operação — clique ou toque sem arrastar para abrir o faceplate.";
       };
       $("#powerFlowBox").addEventListener("close", updateWorkbenchNav);
-      $("#applyPowerFlow").onclick = () => {
-        if (!lastPowerFlowResult?.converged || JSON.stringify(globalSimulationDiagram() || diagram) !== lastPowerFlowSnapshot) {
-          $("#powerFlowSummary").textContent = "O estado do sistema mudou. Calcule novamente antes de mostrar as tensões."; return;
-        }
-        const values = new Map();
-        for (const b of lastPowerFlowResult.buses) for (const id of b.busIds)
-          values.set(id, ["AC · " + b.voltagePU.toFixed(4) + " pu", (b.kv * b.voltagePU).toFixed(2) + " kV · " + b.angleDeg.toFixed(2) + "°"]);
-        setStudyOverlay({ kind: "Fluxo de carga AC", values, snapshot: lastPowerFlowSnapshot });
-        $("#powerFlowBox").close();
-      };
       $("#showNameplates").onchange = () => { localStorage.setItem("simuNameplates", $("#showNameplates").checked ? "1" : "0"); draw(false); };
       $("#dataBlockResults").onchange = () => { localStorage.setItem("simuDataBlocks", $("#dataBlockResults").value); draw(false); };
       $("#clearViewStudy").onclick = () => setStudyOverlay(null);
-      $("#powerFlowBtn").onclick = () => {
-        $("#powerFlowBox").showModal();
-        updateWorkbenchNav();
-        runPowerFlowStudy();
-      };
+      $("#powerFlowBtn").onclick = () => loadFlowWorkbench.open();
       $("#powerFlowClose").onclick = () => $("#powerFlowBox").close();
-      $("#runPowerFlow").onclick = runPowerFlowStudy;
-      for (const id of ["powerFlowMethod", "powerFlowBase", "powerFlowTolerance"]) document.getElementById(id).addEventListener("input", () => {
-        lastPowerFlowResult = null; $("#applyPowerFlow").disabled = true;
-        $("#powerFlowSummary").textContent = "Parâmetros alterados. Calcule novamente para atualizar o relatório.";
-      });
       $("#viewSettingsBtn").onclick = () => $("#viewSettingsBox").showModal();
       $("#viewSettingsClose").onclick = () => $("#viewSettingsBox").close();
       $("#flowAnimationBtn").onclick = () => {
@@ -7792,11 +7639,20 @@
         e.preventDefault();
         const o = diagram.items[selected];
         if (!o) return;
+        if (o.type === "turbogenerator") {
+          const min = e.currentTarget.elements.studyQMinMvar, max = e.currentTarget.elements.studyQMaxMvar;
+          if ((min.value === "") !== (max.value === "") || (min.value !== "" && +min.value > +max.value)) {
+            alert("Informe Q mínimo e Q máximo juntos, em ordem crescente."); return;
+          }
+        }
         pushHistory();
         const data = {};
         for (const n of electricalNames) {
           const input = e.currentTarget.elements[n];
           if (!input || input.closest(".ef")?.hidden) continue;
+          if (["studyQMinMvar", "studyQMaxMvar"].includes(n) && input.value === "") {
+            if (o.electrical) delete o.electrical[n]; continue;
+          }
           data[n] =
             input.tagName === "SELECT" ? input.value : Number(input.value);
         }

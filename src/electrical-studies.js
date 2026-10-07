@@ -1,4 +1,4 @@
-import { buildStudyNetwork } from "./study-network.js?v=44.1";
+import { buildStudyNetwork } from "./study-network.js?v=45";
 
 const C = (re = 0, im = 0) => ({ re, im });
 const add = (a, b) => C(a.re + b.re, a.im + b.im);
@@ -27,7 +27,7 @@ function inverse(matrix) {
   return m.map((row) => row.slice(n));
 }
 export function calculateThreePhaseFault(diagram, options = {}) {
-  const network = buildStudyNetwork(diagram, options), results = [], warnings = [];
+  const network = buildStudyNetwork(diagram, { ...options, generatorControls: false }), results = [], warnings = [];
   for (const [islandIndex, island] of network.islands.entries()) {
     const { ids, sourceIds } = island, errors = [...island.errors], localWarnings = [...island.warnings];
     const index = new Map(ids.map((id, i) => [id, i]));

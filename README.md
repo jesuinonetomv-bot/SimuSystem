@@ -2,6 +2,53 @@
 
 Protótipo vetorial e responsivo do simulador de manobras do sistema elétrico.
 
+## Casos de estudo e temas (v45)
+
+Em **Exibição → Tema do unifilar**, selecione ETAP · AC, SimuSystem · clássico
+ou personalize as cores. O padrão AC usa preto para energizado, cinza para
+desenergizado, vermelho para seleção/alarmes e magenta para atenção. Aberto
+continua identificável pelo contato e símbolo vazados. Manutenção tem cor
+própria e mantém seus sinais. A prévia só é conservada ao clicar em **Salvar
+tema**; fechar a janela restaura o tema salvo neste aparelho.
+
+Em **Estudos → Fluxo de carga**, a janela reúne Configuração, Cargas, Geração,
+Alertas e Resultados. Os casos são salvos por diagrama, neste aparelho; o JSON
+pode ser copiado, baixado e importado em outro dispositivo. Cada caso usa a
+topologia e os contatos atuais sobre uma cópia: não comanda equipamentos nem
+altera os dados da operação. O exemplo didático de três barras é separado do
+sistema publicado e nunca pode ser aplicado ao unifilar da operação.
+
+Fatores globais/individuais multiplicam demanda e geração do momento. É
+possível estudar variação de tap e fatores de R/X das linhas cadastradas.
+Geradores aceitam Auto, PQ (P/Q fixos), PV (controle de tensão) e Referência.
+PV calcula Q e, quando atinge limites reativos cadastrados, passa a PQ no
+estudo e resolve novamente o fluxo. Auto conserva o comportamento anterior:
+P/Q fixos com rede externa e uma referência na ilha de geradores. Referência
+balanceia a ilha, portanto seus MW/MVAr resultantes não são os programados.
+Não há despacho ótimo, curva completa de capacidade, controle de frequência
+ou limitação automática do gerador de referência; violações cadastradas são
+apresentadas nos alertas. Controles PV não mudam o estudo de curto trifásico.
+
+Resultados incluem tensão em kV/%, ângulo, P/Q líquido das barras, fluxo,
+corrente em cada lado do ramo e perdas ativas/reativas. Sobrecarga de TF usa
+o maior MVA das pontas / MVA nominal; linhas usam a maior corrente / ampacidade
+cadastrada. Geradores usam MVA calculado / MVA nominal. Limites ausentes,
+fontes ideais no mesmo nó, ilhas sem fonte e hipóteses aparecem como pendentes.
+Os limites iniciais de alerta são exemplos editáveis. Resultados sem
+convergência são provisórios e não podem ser mostrados no unifilar.
+
+Há relatório CSV, cópia do relatório e impressão/PDF no navegador. No APK,
+CSV/JSON são exportados por cópia de texto; para download/PDF use o navegador.
+Antes de aplicar ou exportar um cálculo, o programa confere se o modelo e os
+parâmetros continuam iguais. Cálculos aplicados saem do unifilar quando o
+estado muda. Alertas de estudo apenas destacam os equipamentos; não geram
+manobras, disparos ou erros no histórico do operador.
+
+Referências de implementação de controles PV/PQ e limites reativos:
+
+- [MATPOWER — runpf e conversão de PV para PQ](https://matpower.org/docs/ref/matpower7.1/lib/runpf.html)
+- [pandapower — fluxo AC, modelos e limites](https://pandapower.readthedocs.io/en/stable/powerflow/ac.html)
+
 ## Recursos
 
 - Diagramas SVG das telas SE-56A-1, SE-56C-1 e Geral Alunorte
@@ -42,7 +89,7 @@ terminais das manobras, incluindo contatos abertos e conectores entre abas.
 Não cria uma fonte em ilhas desligadas. Z% dos transformadores é convertido
 para a potência-base do estudo; o tap e a corrente do enrolamento primário
 entram no cálculo das perdas. Geradores têm P/Q prescritos, salvo a fonte de
-referência da ilha; limites reativos ainda não são aplicados. Valores não
+referência da ilha. A v45 acrescenta controle PV e limites reativos configurados. Valores não
 convergidos são identificados e não podem ser aplicados ao unifilar.
 
 **Curto trifásico:** corrente inicial simétrica nas barras pela impedância

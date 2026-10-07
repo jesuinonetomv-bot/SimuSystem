@@ -46,7 +46,7 @@ export function buildStudyNetwork(diagram, options = {}) {
   const at = (key) => indices.get(root(key));
   const buses = roots.map((key, id) => ({ id, key, name: "Nó " + (id + 1),
     kv: null, type: "PQ", p: 0, q: 0, v: 1, angle: 0, itemIds: [], busIds: [],
-    errors: [], warnings: [] }));
+    errors: [], warnings: [], loadMW: 0, loadMvar: 0, capacitorMvar: 0 }));
   const busOfItem = new Map(), nodesOfItem = new Map();
   const named = new Set();
   for (const [id, ps] of ports) {
@@ -117,7 +117,7 @@ export function buildStudyNetwork(diagram, options = {}) {
         error(br.itemId, "linha entre bases de tensão diferentes");
       const zbase = buses[br.from].kv ** 2 / baseMVA;
       br.r = edge.resistanceOhm / zbase; br.x = edge.reactanceOhm / zbase;
-      br.ampacityA = e.ampacityA;
+      br.ampacityA = o.electrical?.ampacityA;
     } else {
       if (!positive(e.ratedMVA) || !positive(e.impedancePercent) || !positive(e.transformerXR) ||
           !finite(e.tapPercent) || 1 + +e.tapPercent / 100 <= 0) {
@@ -147,6 +147,7 @@ export function buildStudyNetwork(diagram, options = {}) {
       const q = p * Math.tan(Math.acos(+e.powerFactor)) *
         (e.loadNature === "capacitive" ? -1 : e.loadNature === "resistive" ? 0 : 1);
       b.p -= p / baseMVA; b.q -= q / baseMVA;
+      b.loadMW += p; b.loadMvar += q;
       if (o.electrical?.activePowerMW == null) warn(id, "carga com potência padrão " + p + " MW");
     }
     if (o.type === "capacitor") {
@@ -154,21 +155,41 @@ export function buildStudyNetwork(diagram, options = {}) {
       if (!positive(count) || !finite(e.capacitorMvar) || +e.capacitorMvar < 0 || !finite(stages)) {
         error(id, "potência ou estágios inválidos"); continue;
       }
-      b.q += +e.capacitorMvar * Math.max(0, Math.min(count, +stages)) / count / baseMVA;
+      const q = +e.capacitorMvar * Math.max(0, Math.min(count, +stages)) / count;
+      b.q += q / baseMVA; b.capacitorMvar += q;
     }
     if (!sources.includes(id)) continue;
-    sourceData.push({ id, name: name(id), bus: b.id, type: o.type, data: e, raw: o.electrical || {} });
+    const source = { id, name: name(id), bus: b.id, type: o.type, data: e, raw: o.electrical || {} };
+    sourceData.push(source);
     if (o.type === "turbogenerator") {
       const p = o.controlMode === "manual" ? o.manualGenerationMW : +e.generationMW * scale;
       if (!finite(p) || !finite(e.generationMvar)) error(id, "geração P/Q inválida");
       else { b.p += +p / baseMVA; b.q += +e.generationMvar / baseMVA; }
+      source.scheduledMW = +p; source.scheduledMvar = +e.generationMvar;
+      source.mode = options.generatorControls === false ? "auto" : e.studyGeneratorMode || "auto";
+      if (!["auto", "pq", "pv", "slack"].includes(source.mode)) error(id, "modo do gerador inválido");
+      if (options.generatorControls !== false && ((e.studyQMinMvar != null) !== (e.studyQMaxMvar != null) ||
+          (e.studyQMinMvar != null && (!finite(e.studyQMinMvar) || !finite(e.studyQMaxMvar) || +e.studyQMinMvar > +e.studyQMaxMvar))))
+        error(id, "limites de potência reativa inválidos");
+      if (["pv", "slack"].includes(source.mode)) {
+        if (!positive(e.voltageSetpointPU)) error(id, "referência de tensão inválida");
+        else {
+          if (b.regulatingSourceId || b.referenceSourceId) error(id, "duas fontes regulam tensão no mesmo nó; use P/Q fixos para uma delas");
+          b.type = source.mode === "pv" ? "PV" : "Slack"; b.v = +e.voltageSetpointPU;
+          if (source.mode === "pv") b.regulatingSourceId = id;
+          else b.referenceSourceId = id;
+        }
+      }
     } else {
       if (!positive(e.voltageSetpointPU)) error(id, "referência de tensão inválida");
       else {
         if (b.type === "Slack" && Math.abs(b.v - +e.voltageSetpointPU) > 1e-8)
           error(id, "fontes ideais com referências de tensão diferentes no mesmo nó");
-        b.type = "Slack"; b.v = +e.voltageSetpointPU;
+        if (b.regulatingSourceId || (b.referenceSourceId && items[b.referenceSourceId]?.type === "turbogenerator"))
+          error(id, "duas fontes regulam tensão no mesmo nó; use P/Q fixos no gerador");
+        b.type = "Slack"; b.v = +e.voltageSetpointPU; b.referenceSourceId ||= id;
       }
+      source.mode = "slack";
     }
   }
   const adjacent = buses.map(() => []);
@@ -180,11 +201,28 @@ export function buildStudyNetwork(diagram, options = {}) {
     for (let i = 0; i < ids.length; i++) for (const next of adjacent[ids[i]])
       if (!seen.has(next)) { seen.add(next); ids.push(next); }
     const sourceIds = sourceData.filter((s) => ids.includes(s.bus)).map((s) => s.id);
+    const islandSources = sourceData.filter(s => sourceIds.includes(s.id));
+    const explicitReferences = islandSources.filter(s => s.type === "turbogenerator" && s.mode === "slack");
+    if (explicitReferences.length > 1 || (explicitReferences.length && islandSources.some(s => s.type !== "turbogenerator")))
+      for (const s of explicitReferences) error(s.id, "use apenas uma referência por ilha; com a rede em operação, selecione Auto, PV ou PQ");
     if (sourceIds.length && !ids.some((i) => buses[i].type === "Slack")) {
-      const first = sourceData.find((s) => sourceIds.includes(s.id));
-      buses[first.bus].type = "Slack";
-      buses[first.bus].v = positive(first.data.voltageSetpointPU) ? +first.data.voltageSetpointPU : 1;
-      buses[first.bus].warnings.push(first.name + ": gerador usado como referência de tensão e balanço P/Q");
+      const first = islandSources.find(s => s.mode === "auto");
+      if (!first) for (const s of islandSources) error(s.id, "ilha sem referência de tensão; selecione Auto ou Referência em um gerador");
+      else {
+        if (buses[first.bus].regulatingSourceId) error(first.id, "duas fontes regulam tensão no mesmo nó; use PQ em uma delas");
+        buses[first.bus].type = "Slack"; buses[first.bus].referenceSourceId = first.id;
+        buses[first.bus].v = positive(first.data.voltageSetpointPU) ? +first.data.voltageSetpointPU : 1;
+        buses[first.bus].warnings.push(first.name + ": gerador usado como referência de tensão e balanço P/Q");
+      }
+    }
+    for (const index of ids) {
+      const b = buses[index], s = sourceData.find(source => source.id === b.regulatingSourceId);
+      if (s?.data.studyQMinMvar != null) {
+        const otherQ = b.q - s.scheduledMvar / baseMVA;
+        b.qMinPV = otherQ + +s.data.studyQMinMvar / baseMVA;
+        b.qMaxPV = otherQ + +s.data.studyQMaxMvar / baseMVA;
+      }
+      if (s && s.data.studyQMinMvar == null) b.warnings.push(s.name + ": controle PV sem limites de Q cadastrados");
     }
     const idealCount = [...idealLines].filter(id => (nodesOfItem.get(id) || []).some(i => ids.includes(i))).length;
     islands.push({ ids, sourceIds,

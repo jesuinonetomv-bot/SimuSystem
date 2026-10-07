@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/switching-analysis.js && node --check src/diagram-gestures.js && node --check src/session-timeout.js && node --check src/flow-animation.js && node --check src/power-flow.js && node --check src/study-network.js && node --check src/electrical-studies.js && node --check src/technical-symbols.js && node --check src/study-workbench.js && node scripts/check-index.mjs",
+    "check": "node --check src/switching-analysis.js && node --check src/diagram-gestures.js && node --check src/session-timeout.js && node --check src/flow-animation.js && node --check src/power-flow.js && node --check src/study-network.js && node --check src/electrical-studies.js && node --check src/technical-symbols.js && node --check src/study-workbench.js && node --check src/display-theme.js && node --check src/load-flow-workbench.js && node --check src/study-cases.js && node --check src/study-example.js && node scripts/check-index.mjs",
     "test": "node --test tests/*.test.mjs"
   }
 }
