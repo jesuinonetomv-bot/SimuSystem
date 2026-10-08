@@ -1,4 +1,4 @@
-import { buildStudyNetwork } from "./study-network.js?v=46";
+import { buildStudyNetwork } from "./study-network.js?v=47";
 
 const C = (re = 0, im = 0) => ({ re, im });
 const add = (a, b) => C(a.re + b.re, a.im + b.im);
@@ -91,32 +91,41 @@ export const PROTECTION_CURVES = {
   standard: { name: "IEC inversa normal", k: .14, alpha: .02 },
   very: { name: "IEC muito inversa", k: 13.5, alpha: 1 },
   extreme: { name: "IEC extremamente inversa", k: 80, alpha: 2 },
+  iecLong: { name: "IEC inversa longa", k: 120, alpha: 1 },
+  iecShort: { name: "IEC inversa curta", k: .05, alpha: .04 },
+  ieeeModerate: { name: "IEEE moderadamente inversa", k: .0515, alpha: .02, offset: .114 },
+  ieeeVery: { name: "IEEE muito inversa", k: 19.61, alpha: 2, offset: .491 },
+  ieeeExtreme: { name: "IEEE extremamente inversa", k: 28.2, alpha: 2, offset: .1217 },
   definite: { name: "Tempo definido" },
 };
 export function validateProtection(settings) {
   const s = { breakerTime: 0, instantaneousA: 0, instantaneousTime: 0, ...settings };
-  if (!PROTECTION_CURVES[s.protectionCurve]) throw Error("Selecione uma curva de proteção.");
+  if (!Object.hasOwn(PROTECTION_CURVES, s.protectionCurve)) throw Error("Selecione uma curva de proteção.");
   if (!Number.isFinite(+s.pickupA) || +s.pickupA <= 0) throw Error("Pickup deve ser maior que zero.");
   if (s.protectionCurve === "definite") {
     if (!Number.isFinite(+s.definiteTime) || +s.definiteTime <= 0) throw Error("Tempo definido deve ser maior que zero.");
   } else if (!Number.isFinite(+s.timeMultiplier) || +s.timeMultiplier <= 0)
-    throw Error("TMS deve ser maior que zero.");
+    throw Error("Multiplicador de tempo deve ser maior que zero.");
   for (const key of ["breakerTime", "instantaneousA", "instantaneousTime"])
     if (!Number.isFinite(+s[key]) || +s[key] < 0) throw Error("Ajuste de proteção inválido: " + key);
   return s;
 }
-export function protectionTime(settings, currentA) {
+export function protectionResponse(settings, currentA) {
   const s = validateProtection(settings);
   if (!Number.isFinite(+currentA) || +currentA < 0) throw Error("Corrente de avaliação inválida.");
-  let relay = Infinity;
+  let relay = Infinity, element = "none";
   if (+currentA > +s.pickupA) {
     const curve = PROTECTION_CURVES[s.protectionCurve], M = +currentA / +s.pickupA;
     relay = s.protectionCurve === "definite" ? +s.definiteTime :
-      +s.timeMultiplier * curve.k / (M ** curve.alpha - 1);
+      +s.timeMultiplier * (curve.k / Math.expm1(curve.alpha * Math.log(M)) + (curve.offset || 0));
+    element = "timed";
   }
-  if (+s.instantaneousA > 0 && +currentA >= +s.instantaneousA) relay = Math.min(relay, +s.instantaneousTime);
-  return relay + +s.breakerTime;
+  if (+s.instantaneousA > 0 && +currentA >= +s.instantaneousA && +s.instantaneousTime <= relay) {
+    relay = +s.instantaneousTime; element = "instantaneous";
+  }
+  return { relayTime: relay, totalTime: relay + +s.breakerTime, element };
 }
+export const protectionTime = (settings, currentA) => protectionResponse(settings, currentA).totalTime;
 export function compareProtection(a, b, currentA) {
   const downstreamTime = protectionTime(a, currentA), upstreamTime = protectionTime(b, currentA);
   return { currentA: +currentA, downstreamTime, upstreamTime,

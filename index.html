@@ -1331,7 +1331,7 @@
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
     </style>
-    <link rel="stylesheet" href="./src/workbench.css?v=46" />
+    <link rel="stylesheet" href="./src/workbench.css?v=47" />
   </head>
   <body>
     <header>
@@ -1364,7 +1364,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v46</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v47</span>
     </nav>
     <div class="workspace" id="workspace">
       <aside class="side ribbon">
@@ -2302,9 +2302,9 @@
             <label class="ef bus">Capacidade simétrica da barra (kA; opcional)<input name="shortCircuitRatingKA" type="number" min="0.000001" step="any" /></label>
             <label class="ef bus">Capacidade de pico da barra (kA; opcional)<input name="peakWithstandKA" type="number" min="0.000001" step="any" /></label>
             <label class="ef transformer">Relação X/R do transformador<input name="transformerXR" type="number" min="0.01" step="0.1" /></label>
-            <label class="ef breaker">Curva de sobrecorrente<select name="protectionCurve"><option value="none">Não cadastrada</option><option value="standard">IEC inversa normal</option><option value="very">IEC muito inversa</option><option value="extreme">IEC extremamente inversa</option><option value="definite">Tempo definido</option></select></label>
+            <label class="ef breaker">Curva de sobrecorrente<select name="protectionCurve"><option value="none">Não cadastrada</option><option value="standard">IEC inversa normal</option><option value="very">IEC muito inversa</option><option value="extreme">IEC extremamente inversa</option><option value="iecLong">IEC inversa longa</option><option value="iecShort">IEC inversa curta</option><option value="ieeeModerate">IEEE moderadamente inversa</option><option value="ieeeVery">IEEE muito inversa</option><option value="ieeeExtreme">IEEE extremamente inversa</option><option value="definite">Tempo definido</option></select></label>
             <label class="ef breaker">Pickup primário (A)<input name="pickupA" type="number" min="0.01" step="1" /></label>
-            <label class="ef breaker">Multiplicador de tempo (TMS)<input name="timeMultiplier" type="number" min="0.001" step="0.01" /></label>
+            <label class="ef breaker">Multiplicador da equação (TMS)<input name="timeMultiplier" type="number" min="0.001" step="0.01" /></label>
             <label class="ef breaker">Tempo definido (s)<input name="definiteTime" type="number" min="0.001" step="0.01" /></label>
             <label class="ef breaker">Pickup instantâneo (A; 0 desliga)<input name="instantaneousA" type="number" min="0" step="1" /></label>
             <label class="ef breaker">Tempo instantâneo (s)<input name="instantaneousTime" type="number" min="0" step="0.01" /></label>
@@ -2553,10 +2553,10 @@
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
-      import { attachLoadFlowWorkbench } from "./src/load-flow-workbench.js?v=46";
-      import { attachThemeEditor } from "./src/display-theme.js?v=46";
-      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=46";
-      import { attachStudyWorkbench } from "./src/study-workbench.js?v=46";
+      import { attachLoadFlowWorkbench } from "./src/load-flow-workbench.js?v=47";
+      import { attachThemeEditor } from "./src/display-theme.js?v=47";
+      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=47";
+      import { attachStudyWorkbench } from "./src/study-workbench.js?v=47";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=41";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";

@@ -2,6 +2,61 @@
 
 Protótipo vetorial e responsivo do simulador de manobras do sistema elétrico.
 
+## Coordenação de proteção de fase (v47)
+
+Em **Estudos → Coordenação de proteção**, crie casos com até oito proteções
+em um caminho declarado, ordenado de jusante para montante. Copie ajustes de
+disjuntores com curva cadastrada ou configure dispositivos manuais. O exemplo
+de três proteções é independente e usa valores didáticos próprios. Os casos
+são salvos por modelo neste aparelho; JSON permite transferir os parâmetros.
+CSV, relatório copiado e impressão incluem o caso, critérios, resultados e
+hipóteses. O WebView oferece cópia de texto e CSV.
+
+Curvas disponíveis: IEC normal, muito inversa, extremamente inversa, longa e
+curta; IEEE moderadamente, muito e extremamente inversa; tempo definido e
+elemento instantâneo. A equação inversa é `t = k × [A / (M^p − 1) + B]`, com
+`M = I / pickup`. O multiplicador `k` é da equação; não é convertido
+automaticamente do dial de um fabricante. IEC usa `B = 0`. Os três tipos IEEE
+usam respectivamente `(A, B, p) = (0,0515; 0,114; 0,02)`,
+`(19,61; 0,491; 2)` e `(28,2; 0,1217; 2)`.
+Os coeficientes foram conferidos na
+[documentação técnica da ABB](https://techdoc.relays.protection-control.abb/r/REX610-Technical-Manual/1.1/en-US/Standard-inverse-time-characteristics).
+Uma implementação completa de unidade de disparo exige os ajustes próprios
+do fabricante, como mostra o
+[manual MicroLogic X da Schneider](https://productinfo.se.com/micrologicxuserguide/doca0102-micrologic-x/English/BM_MasterPact%20MTZ%20MicroLogic%20X_b5effd44_T001599214.xml/$/TPC_IDMTLProtection_b5effd44_T001599896).
+
+Informe corrente **passante** mínima/máxima e de avaliação, referidas a uma
+tensão comum. No caminho ideal trifásico, `I local = I referência × kV
+referência / kV local`. Ajustes em secundário do TC são convertidos para
+primário local por `TC primário / TC secundário`. A corrente total de curto
+da barra não é aplicada automaticamente aos disjuntores, pois o módulo de
+curto não resolve as correntes individuais dos contatos ideais.
+
+A margem compara **atuação mais cedo do relé a montante menos eliminação mais
+tarde da falta a jusante**, incluindo a abertura do disjuntor a jusante. A
+margem adicional exigida é editável; 0,20 s é um valor inicial de treinamento,
+sem regra normativa universal. A tolerância de tempo configurada é
+`t relé × (1 ± %) ± segundos`, limitada a zero, e o tempo do disjuntor é fixo.
+Ela não representa tolerância de pickup, erro/saturação do TC ou banda completa
+de fabricante. O gráfico mostra tempo total, bandas assumidas e, opcionalmente,
+o tempo só do relé. A tabela mantém os valores mesmo fora da janela do gráfico.
+
+Cada par adjacente é avaliado em 601 pontos logarítmicos, mais a corrente de
+avaliação e os dois lados dos limiares de pickup/instantâneo. **Menor margem
+encontrada** e trechos de alerta referem-se às amostras; não são uma prova
+contínua de seletividade. Sem atuação ou sem retaguarda produz pendência, e
+nenhum desses casos recebe aprovação de margem para toda a faixa. Os tempos
+no ponto supõem falta persistente; o desligamento a jusante pode impedir as
+atuações seguintes. Alterações do caso invalidam resultados; mudanças do
+modelo impedem uso do relatório até novo cálculo.
+
+Escopo: estudo didático de sobrecorrente de fase em caminho declarado, sem
+validação automática da topologia. Não inclui fusíveis, curvas de dano ou
+partida de motor, unidades completas de fabricante, limitação de corrente,
+proteção de terra ou deslocamento de sequência zero. Nenhum cálculo comanda
+contatos, altera os dados da operação ou certifica seletividade integral.
+O material de referência fornecido pelo usuário não é redistribuído.
+
 ## Curto-circuito ANSI / IEC (v46)
 
 Em **Estudos → Curto-circuito · ANSI / IEC**, configure casos de falta trifásica

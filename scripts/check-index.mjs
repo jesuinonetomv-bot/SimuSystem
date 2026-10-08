@@ -17,9 +17,12 @@ for (const id of ["cmd", "cmdOk", "cmdText", "alarmBox", "alarmMessage", "logout
 assert.ok(!ids.includes("switchingAnalysis"), "Operator faceplate must not show the internal study");
 const flowUI = readFileSync(new URL("src/load-flow-workbench.js", root), "utf8");
 const shortUI = readFileSync(new URL("src/short-circuit-workbench.js", root), "utf8");
-const uiIds = [...ids, ...[...shortUI.matchAll(/\bid="([^"$]+)"/g)].map(m => m[1]), ...[...flowUI.matchAll(/\bid="([^"$]+)"/g)].map(m => m[1])];
+const protectionUI = readFileSync(new URL("src/protection-workbench.js", root), "utf8");
+const uiIds = [...ids, ...[...shortUI.matchAll(/\bid="([^"$]+)"/g)].map(m => m[1]), ...[...flowUI.matchAll(/\bid="([^"$]+)"/g)].map(m => m[1]), ...[...protectionUI.matchAll(/\bid="([^"$]+)"/g)].map(m => m[1])];
 for (const id of ["applyPowerFlow", "lfNetwork", "lfSavedCases", "lfSave", "lfTabConfig", "lfTabResults", "lfResultStats", "lfJSONText", "lfImportCase", "lfExportCSV", "lfPrintReport", "runPowerFlow", "powerFlowBusBody", "powerFlowBranchBody", "themeEditor", "saveTheme", "scNetwork", "scStandard", "scRun", "scTabResults", "scSources", "scExportCSV", "scApply", "scSave", "scRatingRows"])
   assert.equal(uiIds.filter(x => x === id).length, 1, "Duplicate/missing study or theme ID: " + id);
+for (const id of ["pcSavedCases", "pcRun", "pcTabConfig", "pcTabDevices", "pcTabResults", "pcChart", "pcPairRows", "pcMargin", "pcShowRelay", "pcExportCSV", "pcJSONText", "pcSave", "pcExample"])
+  assert.equal(uiIds.filter(x => x === id).length, 1, "Duplicate/missing coordination ID: " + id);
 
 const sw = readFileSync(new URL("sw.js", root), "utf8");
 new Script(sw, { filename: "sw.js" });
@@ -31,9 +34,9 @@ assert.ok(sw.includes('"./src/session-timeout.js?v=40"'),
   "Session timeout must be in the offline asset list");
 assert.ok(sw.includes('"./src/flow-animation.js?v=41"'),
   "Animated flow must be in the offline asset list");
-for (const name of ["power-flow.js", "study-network.js", "electrical-studies.js", "technical-symbols.js", "study-workbench.js", "workbench.css", "display-theme.js", "load-flow-workbench.js", "study-cases.js", "study-example.js", "short-circuit.js", "short-circuit-cases.js", "short-circuit-workbench.js"])
-  assert.ok(sw.includes('"./src/' + name + '?v=46"'), "Missing study asset in offline cache: " + name);
-for (const file of ["power-flow.js", "study-network.js", "electrical-studies.js", "study-workbench.js", "study-cases.js", "study-example.js", "load-flow-workbench.js", "display-theme.js", "short-circuit.js", "short-circuit-cases.js", "short-circuit-workbench.js"]) {
+for (const name of ["power-flow.js", "study-network.js", "electrical-studies.js", "technical-symbols.js", "study-workbench.js", "workbench.css", "display-theme.js", "load-flow-workbench.js", "study-cases.js", "study-example.js", "short-circuit.js", "short-circuit-cases.js", "short-circuit-workbench.js", "protection-coordination.js", "protection-chart.js", "protection-workbench.js"])
+  assert.ok(sw.includes('"./src/' + name + '?v=47"'), "Missing study asset in offline cache: " + name);
+for (const file of ["power-flow.js", "study-network.js", "electrical-studies.js", "study-workbench.js", "study-cases.js", "study-example.js", "load-flow-workbench.js", "display-theme.js", "short-circuit.js", "short-circuit-cases.js", "short-circuit-workbench.js", "protection-coordination.js", "protection-chart.js", "protection-workbench.js"]) {
   const source = readFileSync(new URL("src/" + file, root), "utf8");
   for (const entry of source.matchAll(/from\s+["'](\.\/[^"']+)["']/g)) {
     assert.ok(existsSync(new URL(entry[1], new URL("src/", root))), "Missing nested import: " + entry[1]);

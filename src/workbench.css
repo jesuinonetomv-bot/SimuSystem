@@ -178,6 +178,26 @@ header #login, header #operatorLoginBtn { display: none; }
 .case-json-tools { margin: 14px 0; }
 .case-json-tools label { display: grid; gap: 6px; font-size: 12px; }
 .case-json-tools textarea { width: 100%; border: 1px solid #cbd7e4; border-radius: 4px; padding: 10px; font: 12px monospace; margin-bottom: 8px; }
+.pc-device-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.pc-device-heading h3 { margin: 0 0 6px; color: #304a63; font-size: 16px; }
+.pc-device-heading p { margin: 0; font-size: 12px; color: #607489; }
+.protection-device { margin: 16px 0; padding: 14px; border: 1px solid #d5e2ee; border-left: 4px solid #2368b5; border-radius: 5px; min-width: 0; }
+.protection-device legend { font-weight: 650; font-size: 13px; color: #304a63; padding: 0 6px; }
+.pc-device-actions { margin: 0 0 14px; }
+.pc-device-actions button { font-size: 11px; }
+.protection-device [hidden] { display: none !important; }
+.pc-empty { padding: 20px; background: #f5f8fc; border: 1px dashed #b6cbe0; color: #607489; font-size: 13px; }
+.pc-plot-controls { display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.pc-plot-controls .case-check { margin-bottom: 8px; }
+.pc-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 8px 0 12px; font-size: 12px; color: #304a63; }
+.pc-legend span { display: flex; align-items: center; gap: 6px; }
+.pc-legend i { display: block; width: 12px; height: 4px; flex-shrink: 0; }
+.pc-chart-scroll { overflow: auto; max-width: 100%; }
+.pc-chart-scroll .tcc-chart { display: block; min-width: 480px; max-height: 540px; }
+.protection-box #pcResults > h3 { font-size: 14px; margin-top: 22px; color: #304a63; }
+.protection-box #pcResults .study-table td { white-space: normal; min-width: 105px; }
+.protection-box #pcResults .study-table td:first-child { min-width: 165px; }
+.protection-box .case-alert-list p:not(.study-critical):not(.study-warning) { border-color: #287950; background: #eef7f2; }
 @media (max-width: 760px) {
   .case-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .case-bar, .case-panel { padding: 14px; }
@@ -194,10 +214,13 @@ header #login, header #operatorLoginBtn { display: none; }
   dialog.printing-report { display: block; position: static; margin: 0; width: 100%; max-width: none; max-height: none; height: auto; overflow: visible; border: 0; color: #000; }
   dialog.printing-report::backdrop { display: none; }
   .printing-report .case-tabs, .printing-report .case-bar, .printing-report .case-run,
-  .printing-report .case-buttons, .printing-report .case-check, .printing-report #lfReportPreview, .printing-report #scReportPreview,
-  .printing-report [role="tabpanel"]:not(#lfResults):not(#scResults), .printing-report #powerFlowClose,
+  .printing-report .case-buttons, .printing-report .case-check, .printing-report #lfReportPreview, .printing-report #scReportPreview, .printing-report #pcReportPreview,
+  .printing-report .pc-plot-controls, .printing-report [role="tabpanel"]:not(#lfResults):not(#scResults):not(#pcResults), .printing-report #powerFlowClose,
   .printing-report [data-close], .printing-report #scResults > .case-fields { display: none !important; }
-  .printing-report #lfResults, .printing-report #scResults { display: block !important; }
+  .printing-report #lfResults, .printing-report #scResults, .printing-report #pcResults { display: block !important; }
+  .printing-report .pc-chart-scroll { overflow: visible; break-inside: avoid; }
+  .printing-report .pc-chart-scroll .tcc-chart { min-width: 0; width: 100%; max-height: 450px; }
+  .printing-report.protection-box #pcResults .study-table td { min-width: 0; }
   .printing-report .case-table-scroll { overflow: visible; }
   .printing-report .study-table { font-size: 9px; width: 100%; }
   .printing-report .study-table th, .printing-report .study-table td { font-size: 9px; padding: 4px; white-space: normal; }
