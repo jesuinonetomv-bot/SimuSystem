@@ -56,7 +56,10 @@ export function renderTechnicalSymbol(g, o, E) {
     inner.append(E("rect", { x: -6, y: -12, width: 12, height: 24, class: "tech-shape" }));
     if (o.state === "closed") line(0, -12, 0, 12); else { line(0, -12, 0, -4); line(0, 4, 0, 12); }
   } else if (o.type === "relay") {
-    inner.append(E("rect", { x: -24, y: -17, width: 48, height: 34, rx: 3, class: "tech-shape" })); text(0, 5, "50/51");
+    inner.append(E("rect", { x: -27, y: -19, width: 54, height: 38, rx: 3, class: "tech-shape" }));
+    const earth = o.electrical?.earthCurve && o.electrical.earthCurve !== "none", phase = o.electrical?.protectionCurve !== "none";
+    if (earth && phase) { text(0, -2, "50/51"); text(0, 13, "50N/51N"); }
+    else text(0, 5, earth ? "50N/51N" : "50/51");
   } else if (o.type === "ct" || o.type === "cbct") {
     inner.append(E("circle", { cx: 0, cy: 0, r: 14, class: "tech-shape" }));
     if (o.type === "cbct") inner.append(E("circle", { cx: 0, cy: 0, r: 10, class: "tech-shape" }));

@@ -1,6 +1,6 @@
 // Terminal graph for switching studies. The commanded switch is removed
 // before looking for an alternate electrical path; transformers keep two ports.
-import { cableEquivalent, equipmentDefaults } from "./equipment-library.js?v=48.1";
+import { cableEquivalent, equipmentDefaults } from "./equipment-library.js?v=49";
 const SWITCHES = new Set(["breaker", "disconnector"]);
 const CONTACTS = new Set(["breaker", "disconnector", "fuse"]);
 const CONDUCTORS = new Set(["line", "bus"]);
@@ -36,7 +36,9 @@ function configured(o) {
 function impedance(o, data, fraction = 1) {
   if (o.type === "cable") {
     const z = cableEquivalent({ ...equipmentDefaults("cable"), ...o.electrical });
-    return { ...z, hasImpedance: z.known && Math.hypot(z.resistanceOhm, z.reactanceOhm) > EPS,
+    return { ...z, resistanceOhm: z.known ? z.resistanceOhm * fraction : null,
+      reactanceOhm: z.known ? z.reactanceOhm * fraction : null,
+      hasImpedance: z.known && Math.hypot(z.resistanceOhm, z.reactanceOhm) * fraction > EPS,
       kind: "cable", modelDefault: false };
   }
   if (o.type === "transformer") {
@@ -166,6 +168,19 @@ export function createSwitchingStudy(diagram, options = {}) {
     }
   }
   // A conductor drawn behind a switch/transformer must not bypass its ports.
+  // A study-only tap locates a fault without changing the saved drawing.
+  const faultPoint = options.studyFaultPoint;
+  let faultKey = null;
+  if (faultPoint && ports.has(faultPoint.itemId)) {
+    const id = faultPoint.itemId, o = items[id], ps = ports.get(id);
+    if (CONDUCTORS.has(o.type)) {
+      const a = points.get(ps[0]), b = points.get(ps[1]), t = faultPoint.fraction;
+      faultKey = conductorTap(id, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+    } else if (o.type === "cable" && faultPoint.fraction > 0 && faultPoint.fraction < 1) {
+      const a = points.get(ps[0]), b = points.get(ps[1]), t = faultPoint.fraction;
+      faultKey = node(id + "@fault", { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+    } else faultKey = ps[o.type === "cable" && faultPoint.fraction === 1 ? 1 : faultPoint.port || 0];
+  }
   for (const [id, list] of taps) {
     const cp = ports.get(id), a = points.get(cp[0]), b = points.get(cp[1]);
     const cuts = [];
@@ -199,7 +214,10 @@ export function createSwitchingStudy(diagram, options = {}) {
   for (const [id, o] of entries) {
     const ps = ports.get(id);
     if (!ps || ps.length !== 2) continue;
-    if (["transformer", "cable"].includes(o.type) || CONTACTS.has(o.type))
+    if (o.type === "cable" && id === faultPoint?.itemId && faultKey && !ps.includes(faultKey)) {
+      edge(ps[0], faultKey, id, impedance(o, electricalData(o), faultPoint.fraction));
+      edge(faultKey, ps[1], id, impedance(o, electricalData(o), 1 - faultPoint.fraction));
+    } else if (["transformer", "cable"].includes(o.type) || CONTACTS.has(o.type))
       edge(ps[0], ps[1], id, impedance(o, electricalData(o)));
   }
   const conducts = (e, states = {}, excluded = null) =>
@@ -427,6 +445,7 @@ export function createSwitchingStudy(diagram, options = {}) {
     points: new Map([...points].map(([key, point]) => [key, { ...point }])),
     edges: edges.filter((e) => conducts(e, states)).map((e) => ({ ...e })),
     sources: sourceEntries.map(([id]) => id),
+    faultKey,
     issues: issues.map((x) => ({ ...x })),
   });
   return { analyze, command, openingCandidates, energizedItems, network };

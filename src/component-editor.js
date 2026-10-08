@@ -1,5 +1,6 @@
-import { EQUIPMENT_CATALOG, equipmentDefaults, cableEquivalent, instrumentTargets, instrumentLinkIssues, isInstrument, equipmentTypeLabel } from "./equipment-library.js?v=48.1";
-import { PROTECTION_CURVES, validateProtection } from "./electrical-studies.js?v=48.1";
+import { EQUIPMENT_CATALOG, equipmentDefaults, cableEquivalent, instrumentTargets, instrumentLinkIssues, isInstrument, equipmentTypeLabel } from "./equipment-library.js?v=49";
+import { PROTECTION_CURVES, validateProtection } from "./electrical-studies.js?v=49";
+import { sequenceFields, measurementTerminalField } from "./fault-data.js?v=49";
 
 // [key, label, kind, minimum, options]. Empty optional numbers stay null.
 const number = (key, label, min = 0) => [key, label, "number", min];
@@ -9,16 +10,16 @@ const side = select("measurementSide", "Lado medido, se vinculado a transformado
 const fields = {
   cable: [number("lengthM", "Comprimento elétrico (m)", .001), number("parallelRuns", "Circuitos idênticos em paralelo", 1),
     select("material", "Condutor", { copper: "Cobre", aluminium: "Alumínio" }), number("sectionMm2", "Seção por condutor (mm²)", .001), text("insulation", "Isolação"),
-    number("resistanceOhmPerKm", "R de sequência positiva (Ω/km)"), number("reactanceOhmPerKm", "X de sequência positiva (Ω/km)"), number("ampacityPerRunA", "Corrente admissível por circuito (A)", .001)],
-  ct: [number("ctPrimary", "Corrente primária nominal (A)", .000001), number("ctSecondary", "Corrente secundária nominal (A)", .000001), side, text("accuracyClass", "Classe"), number("burdenVA", "Carga nominal (VA)"), text("polarity", "Polaridade")],
+    number("resistanceOhmPerKm", "R de sequência positiva (Ω/km)"), number("reactanceOhmPerKm", "X de sequência positiva (Ω/km)"), number("ampacityPerRunA", "Corrente admissível por circuito (A)", .001), ...sequenceFields("cable")],
+  ct: [number("ctPrimary", "Corrente primária nominal (A)", .000001), number("ctSecondary", "Corrente secundária nominal (A)", .000001), side, measurementTerminalField, text("accuracyClass", "Classe"), number("burdenVA", "Carga nominal (VA)"), text("polarity", "Polaridade")],
   vt: [number("primaryV", "Tensão primária nominal (V)", .000001), number("secondaryV", "Tensão secundária nominal (V)", .000001), select("voltageBasis", "Base da relação", { line: "Fase-fase", phase: "Fase-neutro" }), side, text("accuracyClass", "Classe"), number("burdenVA", "Carga nominal (VA)")],
-  cbct: [number("ctPrimary", "Primário da relação informada pelo fabricante (A)", .000001), number("ctSecondary", "Secundário da relação informada pelo fabricante (A)", .000001), number("apertureMm", "Diâmetro interno (mm)", .001), text("accuracyClass", "Classe / sensor")],
+  cbct: [number("ctPrimary", "Primário da relação informada pelo fabricante (A)", .000001), number("ctSecondary", "Secundário da relação informada pelo fabricante (A)", .000001), side, measurementTerminalField, number("apertureMm", "Diâmetro interno (mm)", .001), text("accuracyClass", "Classe / sensor")],
   relay: [text("manufacturer", "Fabricante"), text("model", "Modelo"),
     select("inputBasis", "Base dos ajustes de fase", { secondary: "Secundário do TC de fase", primary: "Primário local" }),
     select("protectionCurve", "Curva de fase (50/51)", { none: "Desativada", ...Object.fromEntries(Object.entries(PROTECTION_CURVES).map(([k, v]) => [k, v.name])) }),
     number("pickupA", "Pickup de fase (A na base escolhida)", .000001), number("timeMultiplier", "Multiplicador de tempo", .000001), number("definiteTime", "Tempo definido (s)"),
     number("instantaneousA", "Pickup instantâneo (A; 0 desliga)"), number("instantaneousTime", "Tempo instantâneo (s)"), number("breakerTime", "Tempo do disjuntor se não cadastrado nele (s)"),
-    number("earthPickupA", "Pickup de terra (A secundários; cadastro)", .000001), number("earthDelaySeconds", "Tempo de terra (s; cadastro)")],
+    ...sequenceFields("relay")],
   fuse: [number("ratedCurrentA", "Corrente nominal (A)", .000001), number("breakingCapacityKA", "Capacidade de interrupção (kA)", .000001), text("fuseClass", "Classe / referência"),
     select("state", "Estado no modelo", { closed: "Intacto", open: "Aberto / fundido" })],
   motor: [number("activePowerMW", "Potência elétrica absorvida (MW)"), number("powerFactor", "Fator de potência", .000001), number("ratedSpeedRPM", "Rotação nominal (rpm)", .001),
@@ -76,6 +77,11 @@ export function attachComponentEditor({ getDiagram, onSave, canEdit = () => true
     if (next.type === "relay" && next.electrical.protectionCurve !== "none") {
       try { validateProtection(next.electrical); } catch (error) { issues.push(error.message); }
     }
+    if (next.type === "relay" && next.electrical.earthCurve !== "none") {
+      const e = next.electrical;
+      try { validateProtection({ protectionCurve: e.earthCurve, pickupA: e.earthPickupA, timeMultiplier: e.earthTimeMultiplier,
+        definiteTime: e.earthDelaySeconds, instantaneousA: e.earthInstantaneousA, instantaneousTime: e.earthInstantaneousTime }); } catch (error) { issues.push("Terra: " + error.message); }
+    }
     for (const key of next.type === "ct" ? ["ctPrimary", "ctSecondary"] : next.type === "vt" ? ["primaryV", "secondaryV"] : []) if (!(next.electrical[key] > 0)) issues.push("Informe a relação nominal completa.");
     if (issues.length) { status.textContent = issues.join(" "); return; }
     onSave(currentId, next); dialog.close();
@@ -88,7 +94,7 @@ export function attachComponentEditor({ getDiagram, onSave, canEdit = () => true
     dialog.querySelector("[data-status]").textContent = "";
     descriptors = [number("nominalKV", "Tensão nominal do circuito (kV)", .001), ...fields[o.type]];
     const data = { ...equipmentDefaults(o.type), ...o.electrical };
-    for (const descriptor of descriptors) makeField(descriptor, descriptor[0] === "state" ? o.state : data[descriptor[0]]);
+    for (const descriptor of descriptors) makeField(descriptor, descriptor[0] === "state" ? o.state : data[descriptor[0]] ?? descriptor[5]);
     const instrument = isInstrument(o); dialog.querySelector("[data-links-title]").hidden = !instrument;
     if (instrument) for (const [key, types] of Object.entries(instrumentTargets(o.type))) {
       const options = { "": "Sem vínculo" };

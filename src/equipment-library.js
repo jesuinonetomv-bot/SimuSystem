@@ -1,10 +1,10 @@
 // Instrument links are metadata, never power-graph edges.
 export const EQUIPMENT_CATALOG = Object.freeze({
   cable: { name: "Cabo", tag: "CABO", kind: "branch", note: "R e X por km devem vir dos dados do cabo na condição de operação. O comprimento do desenho não define o comprimento elétrico. Circuitos paralelos são idênticos e sem acoplamento mútuo neste modelo." },
-  relay: { name: "Relé de proteção", tag: "RELÉ", kind: "instrument", note: "Os ajustes de fase podem ser copiados para o estudo de coordenação. As funções de terra ficam cadastradas; faltas à terra e disparo automático ainda não são calculados." },
+  relay: { name: "Relé de proteção", tag: "RELÉ", kind: "instrument", note: "Funções de fase 50/51 e de terra 50N/51N, com ajustes e sensores separados. Vincule o sensor ao ramo medido e o relé ao disjuntor. Estudos → Curto e sequência de atuação calcula os comandos e as aberturas na cópia do modelo." },
   ct: { name: "TC", tag: "TC", kind: "instrument", note: "Medição de corrente por relação ideal. Classe e carga são dados de cadastro; saturação do TC não é calculada." },
   vt: { name: "TP", tag: "TP", kind: "instrument", note: "Medição por relação ideal. Informe tensões primária e secundária na mesma base: fase-fase ou fase-neutro." },
-  cbct: { name: "TC toroidal", tag: "TC TOROIDAL", kind: "instrument", note: "Sensor de corrente residual, separado dos TCs de fase. A corrente residual não é inferida do fluxo trifásico equilibrado. Faltas à terra ainda não são calculadas." },
+  cbct: { name: "TC toroidal", tag: "TC TOROIDAL", kind: "instrument", note: "Sensor de corrente residual, separado dos TCs de fase. A sequência de atuação usa 3I₀ calculado no ramo vinculado e a relação informada pelo fabricante; o fluxo equilibrado não fornece essa corrente." },
   fuse: { name: "Fusível", tag: "FUSÍVEL", kind: "series", note: "Intacto conduz; aberto interrompe a ligação. Corrente nominal e capacidade de interrupção são dados de cadastro. Curva de fusão e atuação automática ainda não são calculadas." },
   motor: { name: "Motor", tag: "MOTOR", kind: "load", note: "A potência informada é a potência elétrica absorvida, usada no fluxo de carga. Partida e contribuição do motor ao curto-circuito ainda não são calculadas." },
   surgeArrester: { name: "Para-raios", tag: "PR", kind: "instrument", note: "Cadastro e vínculo à instalação protegida. Descargas, surtos e atuação do para-raios ainda não são calculados." },
@@ -21,10 +21,11 @@ export function equipmentDefaults(type) {
   const base = { nominalKV: 13.8, frequencyHz: 60 };
   const values = {
     cable: { lengthM: 100, resistanceOhmPerKm: null, reactanceOhmPerKm: null, parallelRuns: 1, ampacityPerRunA: null, material: "copper", sectionMm2: null, insulation: "XLPE" },
-    relay: { protectionCurve: "none", inputBasis: "secondary", pickupA: 1, timeMultiplier: .1, definiteTime: .5, instantaneousA: 0, instantaneousTime: .02, breakerTime: .06, earthPickupA: null, earthDelaySeconds: null, manufacturer: "", model: "" },
-    ct: { ctPrimary: 600, ctSecondary: 1, accuracyClass: "", burdenVA: null, polarity: "P1 → P2", measurementSide: "secondary" },
+    relay: { protectionCurve: "none", inputBasis: "secondary", pickupA: 1, timeMultiplier: .1, definiteTime: .5, instantaneousA: 0, instantaneousTime: .02, breakerTime: .06,
+      earthCurve: "none", earthInputBasis: "secondary", earthSensor: "residual", earthPickupA: null, earthDelaySeconds: null, earthTimeMultiplier: .1, earthInstantaneousA: 0, earthInstantaneousTime: .02, manufacturer: "", model: "" },
+    ct: { ctPrimary: 600, ctSecondary: 1, accuracyClass: "", burdenVA: null, polarity: "P1 → P2", measurementSide: "secondary", measurementTerminal: "A" },
     vt: { primaryV: 13800, secondaryV: 110, voltageBasis: "line", accuracyClass: "", burdenVA: null, measurementSide: "secondary" },
-    cbct: { ctPrimary: null, ctSecondary: null, apertureMm: null, accuracyClass: "" },
+    cbct: { ctPrimary: null, ctSecondary: null, apertureMm: null, accuracyClass: "", measurementSide: "secondary", measurementTerminal: "A" },
     fuse: { ratedCurrentA: null, breakingCapacityKA: null, fuseClass: "" },
     motor: { activePowerMW: 1, powerFactor: .9, loadNature: "inductive", ratedSpeedRPM: null },
     surgeArrester: { ratedVoltageKV: null, continuousVoltageKV: null, dischargeCurrentKA: null },

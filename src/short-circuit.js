@@ -1,5 +1,5 @@
-import { buildStudyNetwork } from "./study-network.js?v=48.1";
-import { prepareFaultCase, analyzeFaultAlerts } from "./short-circuit-cases.js?v=48.1";
+import { buildStudyNetwork } from "./study-network.js?v=49";
+import { prepareFaultCase, analyzeFaultAlerts } from "./short-circuit-cases.js?v=49";
 
 const C = (re = 0, im = 0) => ({ re, im }), abs = z => Math.hypot(z.re, z.im);
 const add = (a, b) => C(a.re + b.re, a.im + b.im), sub = (a, b) => C(a.re - b.re, a.im - b.im);
@@ -33,7 +33,7 @@ export function voltageFactor(kv, calculation, maximum = false) {
   if (!maximum && calculation.scenario === "min") return kv <= 1 ? .95 : 1;
   return kv <= 1 && calculation.lvTolerance === 6 ? 1.05 : 1.1;
 }
-function sourceImpedance(source, network, c) {
+export function sourceImpedance(source, network, c) {
   const { raw: e, name } = source;
   const requireValue = (key, label) => { if (!positive(e[key])) throw Error(name + ": informe " + label + "."); return +e[key]; };
   const kv = requireValue("nominalKV", "a tensão nominal (kV)"), busKV = network.buses[source.bus].kv;

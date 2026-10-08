@@ -2,6 +2,65 @@
 
 Protótipo vetorial e responsivo do simulador de manobras do sistema elétrico.
 
+## Curto e sequência de atuação (v49)
+
+Em **Estudos → Curto e sequência de atuação**, escolha o ponto diretamente no
+unifilar do estudo ou na lista. Barras/conexões/cabos aceitam uma posição de
+0 a 100%; equipamentos aceitam o terminal A/B (primário/secundário no TF).
+Arrastar navega, sem selecionar ou comandar equipamentos. Estão disponíveis
+curtos A-B, B-C, C-A, A-terra, B-terra, C-terra e trifásico, com R/X de falta.
+
+**Calcular quem atua** resolve as redes de sequência, calcula a corrente de
+fase/residual no sensor vinculado e avalia 50/51 e 50N/51N. A tabela separa
+comando do relé e abertura do disjuntor. A reprodução por eventos abre os
+disjuntores numa cópia do modelo; não modifica o sistema publicado ou a
+sessão de operação. Após cada abertura, correntes e temporizadores são
+recalculados. Uma retaguarda ainda sem comando pode deixar de atuar quando
+a falta é eliminada; um comando já emitido fica latched e completa a abertura.
+Empates entre atuação e abertura são registrados antes da interrupção.
+
+Os temporizadores integram `Δt / t(I)` para curvas inversas/tempo definido,
+com reset imediato abaixo do pickup. O instantâneo tem temporização própria.
+Não são reproduzidos memória/reset de fabricante, saturação de TC, decaimento
+da corrente de geradores, contribuição de motores/inversores, arco,
+capacitâncias à terra, fusão automática ou funções direcionais/diferenciais.
+Não há correções normativas IEC/ANSI neste novo módulo; o estudo trifásico
+ANSI/IEC anterior continua disponível separadamente.
+
+Cadastre os dados em **Modelagem → Dados elétricos**:
+
+| Equipamento | Dados para o novo estudo |
+| --- | --- |
+| Fonte | MVA/X-R de curto ou dados subtransitórios do TG; Z₂ informado ou hipótese explicitamente declarada Z₂ = Z₁; Z₀ e retorno de terra na zona da falta |
+| Transformador | Placa nominal, grupo horário, ligações D/Y/Yg, Z₀% e X/R de Z₀ quando existe caminho de terra, impedâncias dos neutros |
+| Cabo/conexão | R/X de sequência positiva; R₀/X₀ explícitos para fase-terra, usando a mesma base de comprimento/circuitos |
+| Relé | Canal de fase e terra habilitados separadamente, curva/pickups/tempos, TC ou toroidal e disjuntor de atuação vinculados |
+| TC/toroidal | Relação ideal, equipamento medido, terminal A/B ou enrolamento primário/secundário |
+| Disjuntor | Tempo de abertura; ajustes locais 50/51 e 50N/51N podem ser usados diretamente em amperes primários |
+
+As redes positiva, negativa e zero contraem seus trechos ideais
+**independentemente**. Contatos ideais recebem corrente recuperada por
+Kirchhoff quando a topologia a determina; em laços ideais paralelos o resultado
+fica pendente, sem divisão arbitrária. Transformadores aplicam o grupo horário
+com sinais opostos em sequências positiva/negativa. D/Yg e Yg/D oferecem retorno
+local de terra no enrolamento aterrado, bloqueando residual externo no delta;
+Yg/Yg transfere sequência zero. Y/Yg sem delta requer magnetização de sequência
+zero e fica explicitamente pendente neste modelo. Sem retorno condutivo, o
+resultado não é chamado de falta eliminada: o ponto pode continuar energizado.
+O símbolo de aterramento não substitui os dados de sequência zero.
+
+Referências de componentes simétricas e redes de falta:
+[SEL · Tutorial on Symmetrical Components](https://selinc.com/api/download/100688)
+e [SEL · Introduction to Symmetrical Components](https://selinc.com/api/download/2470).
+Fontes negativas devem ser declaradas; geradores não recebem X₂ fictício.
+Linhas/cabos equilibrados e transformadores passivos usam Z₂ = Z₁.
+O neutro contribui com `3Zn`; fase-terra inclui `3Zf`.
+
+Casos são salvos neste aparelho por modelo, com importação/exportação JSON.
+CSV/TXT incluem ponto/tipo de falta, correntes, tempos previstos e efetivos,
+pendências e hipóteses. O exemplo didático completo permite verificar fase,
+terra e retaguarda sem alterar diagramas reais.
+
 ## Componentes do unifilar (v48)
 
 Em **Modelagem → Inserir**, estão disponíveis cabo, relé, TC, TP,
@@ -34,9 +93,10 @@ tracejadas aparecem na modelagem ao selecionar o instrumento. A cópia de um
 conjunto conserva apenas vínculos cujos alvos também foram copiados; a exclusão
 limpa referências ao alvo removido. Um cabo só aceita conexão em suas extremidades.
 
-Saturação de TC, faltas à terra, partida e contribuição de motor ao curto,
-curvas de fusíveis, surtos e disparo automático dos novos componentes não são
-calculados. Estas limitações aparecem em cada cadastro. A leitura de TC/TP é
+Saturação de TC, partida e contribuição de motor ao curto,
+curvas de fusíveis e surtos não são calculados. Faltas à terra e comandos dos
+relés são calculados no estudo de sequência v49, dentro do escopo acima.
+A leitura de TC/TP no modo operacional é
 uma estimativa do modelo operacional. Corrente de barra ou contato sem solução
 passante não aparece como um zero calculado. Dois relés que atuam no mesmo
 disjuntor não podem ser tratados como dispositivos em série na coordenação.

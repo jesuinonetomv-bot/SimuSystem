@@ -60,11 +60,83 @@ header #login, header #operatorLoginBtn { display: none; }
 .component-editor footer button { border: 1px solid #c1d2e3; border-radius: 5px; padding: 10px 16px; background: white; color: #245b9c; cursor: pointer; }
 .component-editor [data-save] { background: #245b9c; color: white; }
 .instrument-link { stroke: #6386a9; stroke-width: 1.4; stroke-dasharray: 5 4; fill: none; pointer-events: none; }
+.sequence-fields { border: 1px solid #d6e2ee; border-radius: 5px; margin: 22px 0; padding: 12px; min-width: 0; }
+.sequence-fields legend { color: #245b9c; font-size: 13px; font-weight: 650; }
+.sequence-fields .case-fields, .sequence-fields .study-note { margin: 10px 0; padding: 0; }
+.fault-sequence-box { width: min(1320px, 96vw); color: #243c54; }
+.fault-sequence-box, .fault-sequence-box * { box-sizing: border-box; }
+.fault-sequence-box > .history-head { position: sticky; top: 0; z-index: 3; background: #f8fafc; }
+.fault-sequence-box .case-bar, .fault-sequence-box .case-fields { min-width: 0; }
+.fault-sequence-box .fs-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.fs-fields .wide { grid-column: span 2; }
+.fs-advanced, .fs-details { margin: 0 20px 16px; font-size: 12px; }
+.fs-advanced summary, .fs-details summary { cursor: pointer; padding: 8px 0; font-weight: 650; color: #386188; }
+.fs-details .study-note { margin: 12px 0; }
+.fs-details ul { padding-left: 18px; color: #6a7d90; line-height: 1.6; }
+.fs-message { margin: 0 20px 16px; padding: 11px 14px; background: #edf5fc; border-left: 3px solid #2c72b4; font-size: 13px; line-height: 1.5; }
+.fs-message.error { color: #a12837; background: #fff0f1; border-color: #d0404f; }
+.fault-sequence-box .fs-primary { background: #245b9c; color: white; border-color: #245b9c; }
+.fs-stats { margin: 0 20px 18px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.fs-stats strong { font-size: 16px; }
+.fs-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin: 0 20px 20px; }
+.fs-diagram-panel, .fs-events-panel { min-width: 0; border: 1px solid #d8e2ee; border-radius: 6px; overflow: hidden; }
+.fs-diagram-head, .fs-events-head { padding: 14px; background: #f3f7fb; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.fs-diagram-head strong, .fs-diagram-head small { display: block; }
+.fs-diagram-head small { color: #678096; font-size: 11px; margin-top: 5px; }
+.fs-diagram-head label { display: grid; gap: 4px; font-size: 11px; min-width: 0; }
+.fs-diagram-head select { border: 1px solid #ccd8e5; padding: 6px; border-radius: 4px; max-width: 130px; background: white; color: #385b7c; }
+.fs-viewport { height: 490px; overflow: auto; touch-action: pan-x pan-y; background: white; }
+.fs-viewport.panning { cursor: grabbing; user-select: none; }
+.fs-viewport svg { display: block; width: 100%; min-width: 530px; height: 490px; background: white; cursor: crosshair; }
+.fs-viewport .sel { display: none; }
+.fs-viewport .tag { font-size: 13px; paint-order: stroke; stroke: white; stroke-width: 3px; }
+.fs-viewport .fs-binding { stroke: #667d91; stroke-width: 1.4; }
+.fs-viewport .fs-operated { --equipment-color: #d98200; --contact-color: #d98200; --closed-color: #d98200; }
+.fs-viewport .fs-operated .tag { fill: #b96700; font-weight: 750; }
+.fs-fault-marker circle { fill: #fff5f5; stroke: #c63846; stroke-width: 2; }
+.fs-fault-marker path { fill: #c63846; }
+.fs-fault-marker text { fill: #b22e3b; font: 13px system-ui; font-weight: 700; paint-order: stroke; stroke: white; stroke-width: 3px; }
+.fs-diagram-panel > .study-note { margin: 10px 14px; }
+.fs-events-head h3 { margin: 0; font-size: 15px; }
+.fs-events-head output { font-weight: 700; color: #b22e3b; font-variant-numeric: tabular-nums; font-size: 16px; }
+.fs-playback { display: flex; gap: 5px; padding: 14px 14px 6px; flex-wrap: wrap; }
+.fs-playback button, .fs-event-table button, .fs-details button { border: 1px solid #ccd8e5; padding: 7px 10px; border-radius: 4px; color: #245b9c; background: white; cursor: pointer; }
+.fs-playback button:disabled { opacity: .45; cursor: default; }
+.fs-slider { display: grid; gap: 5px; font-size: 11px; color: #728295; padding: 8px 14px; }
+.fs-slider input { width: 100%; margin: 0; accent-color: #245b9c; }
+.fs-event-description { font-size: 12px; line-height: 1.5; margin: 0; padding: 10px 14px; background: #f8fafc; color: #486781; min-height: 52px; }
+.fs-events-panel .case-table-scroll { max-height: 340px; }
+.fs-events-panel .study-table { border-collapse: collapse; }
+.fs-event-table th, .fs-event-table td { padding: 10px; text-align: left; }
+.fs-event-table td:first-child { min-width: 0; white-space: nowrap; }
+.fs-current-event { background: #e9f3fd; }
+.fs-current-event button { background: #245b9c; color: white; }
+.fs-protections { margin: 0 20px 20px; min-width: 0; }
+.fs-protections h3 { font-size: 16px; margin: 0 0 8px; }
+.fs-protections .study-note { margin: 0 0 12px; }
+.fs-protections .study-table { width: 100%; border-collapse: collapse; }
+.fs-protections th, .fs-protections td { text-align: left; padding: 12px 10px; min-width: 100px; }
+.fs-protection-operated { background: #eff8f1; }
+.fs-protection-pending { background: #fff5e9; }
+.fs-protections td:last-child { min-width: 220px; line-height: 1.5; }
+@media (max-width: 900px) { .fs-layout { grid-template-columns: 1fr; } }
+@media (max-width: 520px) {
+  .fault-sequence-box .fs-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 14px; }
+  .fs-fields .wide { grid-column: 1 / -1; }
+  .fs-layout, .fs-protections { margin: 0 14px 16px; }
+  .fs-stats { margin: 0 14px 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fs-stats strong { font-size: 14px; }
+  .fs-message { margin: 0 14px 16px; font-size: 12px; }
+  .fs-events-head output { font-size: 14px; }
+  .fault-sequence-box .history-head { padding: 12px 14px; }
+  .fault-sequence-box h2 { font-size: 17px; }
+  .fs-viewport, .fs-viewport svg { height: 430px; }
+}
 @media (max-width: 520px) { .component-editor h2 { font-size: 17px; } .component-body { padding: 15px; } .component-editor .case-fields { grid-template-columns: 1fr; } }
 .study-hub .history-head, .study-box .history-head { padding: 16px 20px; border-bottom: 1px solid #dbe3ed; }
 .study-hub h2, .study-box h2 { font-size: 20px; margin: 0; }
 .study-intro { margin: 16px 20px; color: #617386; line-height: 1.5; }
-.study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 4px 20px 20px; }
+.study-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 4px 20px 20px; }
 .study-card { border: 1px solid #d8e2ec; background: #f8fafc; border-radius: 6px; padding: 20px 16px; text-align: left; color: #172738; cursor: pointer; }
 .study-card:hover, .study-card:focus-visible { border-color: #2562aa; background: #f0f6fe; }
 .study-card span { display: block; color: #2562aa; font-size: 11px; letter-spacing: 1px; margin-bottom: 12px; }

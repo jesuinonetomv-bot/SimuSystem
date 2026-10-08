@@ -1,7 +1,7 @@
 // Balanced, positive-sequence training model. Connectivity comes from the
 // switching graph, so an open contact and a connector mean the same in all modes.
-import { createSwitchingStudy } from "./switching-analysis.js?v=48.1";
-import { equipmentDefaults, cableEquivalent } from "./equipment-library.js?v=48.1";
+import { createSwitchingStudy } from "./switching-analysis.js?v=49";
+import { equipmentDefaults, cableEquivalent } from "./equipment-library.js?v=49";
 
 const positive = (v) => v !== null && v !== "" && Number.isFinite(+v) && +v > 0;
 const finite = (v) => v !== null && v !== "" && Number.isFinite(+v);
@@ -234,5 +234,6 @@ export function buildStudyNetwork(diagram, options = {}) {
       warnings: [...new Set([...ids.flatMap((i) => buses[i].warnings),
         ...(idealCount ? [idealCount + " conexões ideais; R/X não cadastrados"] : [])])] });
   }
-  return { baseMVA: +baseMVA, buses, branches, busOfItem, nodesOfItem, sourceData, islands, items };
+  return { baseMVA: +baseMVA, buses, branches, busOfItem, nodesOfItem, sourceData, islands, items,
+    graph, pointBus: new Map([...points.keys()].map(key => [key, at(key)])) };
 }

@@ -1,7 +1,7 @@
-import { runShortCircuitCase } from "./short-circuit.js?v=48.1";
+import { runShortCircuitCase } from "./short-circuit.js?v=49";
 import { DEFAULT_FAULT_CASE, normalizeFaultCase, faultCaseLabel, saveFaultCases, loadFaultCases,
-  faultReportCSV, faultReportText } from "./short-circuit-cases.js?v=48.1";
-import { faultStudyExample } from "./study-example.js?v=48.1";
+  faultReportCSV, faultReportText } from "./short-circuit-cases.js?v=49";
+import { faultStudyExample } from "./study-example.js?v=49";
 
 export function attachShortCircuitWorkbench({ dialog, getDiagram, getScope, networkOptions, setOverlay, onOpen }) {
   const host = dialog.querySelector("#shortCircuitWorkbench"), $ = id => dialog.querySelector("#" + id);
