@@ -1,6 +1,6 @@
-import { EQUIPMENT_CATALOG, equipmentDefaults, cableEquivalent, instrumentTargets, instrumentLinkIssues, isInstrument, equipmentTypeLabel } from "./equipment-library.js?v=49";
-import { PROTECTION_CURVES, validateProtection } from "./electrical-studies.js?v=49";
-import { sequenceFields, measurementTerminalField } from "./fault-data.js?v=49";
+import { EQUIPMENT_CATALOG, equipmentDefaults, cableEquivalent, instrumentTargets, instrumentLinkIssues, isInstrument, equipmentTypeLabel } from "./equipment-library.js?v=49.1";
+import { PROTECTION_CURVES, validateProtection } from "./electrical-studies.js?v=49.1";
+import { sequenceFields, measurementTerminalField } from "./fault-data.js?v=49.1";
 
 // [key, label, kind, minimum, options]. Empty optional numbers stay null.
 const number = (key, label, min = 0) => [key, label, "number", min];

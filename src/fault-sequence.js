@@ -1,6 +1,6 @@
-import { calculatePointFault, normalizeSequenceCase, SEQUENCE_ASSUMPTIONS, FAULT_TYPES } from "./fault-analysis.js?v=49";
-import { validateProtection, protectionResponse } from "./electrical-studies.js?v=49";
-import { equipmentDefaults } from "./equipment-library.js?v=49";
+import { calculatePointFault, normalizeSequenceCase, SEQUENCE_ASSUMPTIONS, FAULT_TYPES } from "./fault-analysis.js?v=49.1";
+import { validateProtection, protectionResponse } from "./electrical-studies.js?v=49.1";
+import { equipmentDefaults } from "./equipment-library.js?v=49.1";
 
 const present = v => v != null && v !== "" && Number.isFinite(+v);
 function ratio(sensor) {

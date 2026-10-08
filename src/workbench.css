@@ -91,7 +91,7 @@ header #login, header #operatorLoginBtn { display: none; }
 .fs-viewport .sel { display: none; }
 .fs-viewport .tag { font-size: 13px; paint-order: stroke; stroke: white; stroke-width: 3px; }
 .fs-viewport .fs-binding { stroke: #667d91; stroke-width: 1.4; }
-.fs-viewport .fs-operated { --equipment-color: #d98200; --contact-color: #d98200; --closed-color: #d98200; }
+.fs-viewport .technical .item.fs-operated { --equipment-color: #d98200; --contact-color: #d98200; --closed-color: #d98200; }
 .fs-viewport .fs-operated .tag { fill: #b96700; font-weight: 750; }
 .fs-fault-marker circle { fill: #fff5f5; stroke: #c63846; stroke-width: 2; }
 .fs-fault-marker path { fill: #c63846; }

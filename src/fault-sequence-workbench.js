@@ -1,9 +1,9 @@
-import { FAULT_TYPES, DEFAULT_SEQUENCE_CASE, normalizeSequenceCase } from "./fault-analysis.js?v=49";
-import { simulateFaultSequence, sequenceExample, SEQUENCE_STATUS, PROTECTION_STATUS, sequenceReportCSV, sequenceReportText } from "./fault-sequence.js?v=49";
-import { createSwitchingStudy } from "./switching-analysis.js?v=49";
-import { renderTechnicalSymbol, renderInstrumentLinks } from "./technical-symbols.js?v=49";
+import { FAULT_TYPES, DEFAULT_SEQUENCE_CASE, normalizeSequenceCase } from "./fault-analysis.js?v=49.1";
+import { simulateFaultSequence, sequenceExample, SEQUENCE_STATUS, PROTECTION_STATUS, sequenceReportCSV, sequenceReportText } from "./fault-sequence.js?v=49.1";
+import { createSwitchingStudy } from "./switching-analysis.js?v=49.1";
+import { renderTechnicalSymbol, renderInstrumentLinks } from "./technical-symbols.js?v=49.1";
 import { attachDiagramGestures } from "./diagram-gestures.js?v=42";
-import { equipmentTypeLabel, isInstrument } from "./equipment-library.js?v=49";
+import { equipmentTypeLabel, isInstrument } from "./equipment-library.js?v=49.1";
 
 export function attachFaultSequenceWorkbench({ dialog, getDiagram, getScope, networkOptions = {}, onOpen }) {
   const host = dialog.querySelector("#faultSequenceWorkbench"), $ = id => host.querySelector("#" + id);
@@ -132,7 +132,15 @@ export function attachFaultSequenceWorkbench({ dialog, getDiagram, getScope, net
           E("line", { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, stroke: "transparent", "stroke-width": 20 }));
       }
       const x = o.x ?? (o.x1 + o.x2) / 2, y = o.y ?? (o.y1 + o.y2) / 2;
-      g.append(E("text", { x: x + 30, y: y - 12, class: "tag" }, o.name || equipmentTypeLabel(o.type))); svg.append(g);
+      if (o.name || !segment(o)) {
+        const fs = +o.fontSize || 16;
+        const defaultPosition = ["ct", "vt", "cbct"].includes(o.type) ? "below" : o.type === "relay" || o.type === "bus" ? "above" :
+          ["breaker", "disconnector", "fuse", "utility"].includes(o.type) ? "left" : "right";
+        const position = o.labelPosition || defaultPosition;
+        const [dx, dy, anchor] = { above: [0, -32, "middle"], below: [0, 38, "middle"], left: [-30, -12, "end"], right: [30, -12, "start"] }[position] || [30, -12, "start"];
+        g.append(E("text", { x: x + dx + (+o.tagX || 0), y: y + dy + (+o.tagY || 0), class: "tag", style: "font-size:" + fs + "px", "text-anchor": anchor }, o.name || equipmentTypeLabel(o.type)));
+      }
+      svg.append(g);
     }
     const point = markerPoint();
     if (point && prefix($("fsPoint").value) === scope && Number.isFinite(point.x) && Number.isFinite(point.y)) {

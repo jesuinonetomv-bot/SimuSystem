@@ -1,5 +1,5 @@
-import { buildStudyNetwork } from "./study-network.js?v=49";
-import { sourceImpedance } from "./short-circuit.js?v=49";
+import { buildStudyNetwork } from "./study-network.js?v=49.1";
+import { sourceImpedance } from "./short-circuit.js?v=49.1";
 
 // Sequence networks are contracted independently: a zero Z1 never erases Z0.
 export const C = (re = 0, im = 0) => ({ re, im });

@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SimuSystem v49 · Curto e atuação</title>
-<link rel="stylesheet" href="../src/workbench.css?v=49">
+<link rel="stylesheet" href="../src/workbench.css?v=49.1">
 <style>body{margin:0;background:#e9eff6;color:#243c54;font:14px system-ui}button,input,select,textarea{font:inherit}button{cursor:pointer}.history-head{display:flex;align-items:center;gap:12px}.history-head .grow{flex:1}.history-head button{background:white;border:1px solid #ccd8e5;border-radius:4px;color:#245b9c}.study-table{border-collapse:collapse}.study-table td{border-bottom:1px solid #e3e9f1}.case-json-tools{margin:20px}.case-json-tools textarea{width:100%;box-sizing:border-box}dialog::backdrop{background:#17304b22}main{padding:20px}main h1{margin:0 0 8px;font-size:22px}main button{padding:12px;color:white;background:#245b9c;border:0;border-radius:5px}.fs-events-panel .case-table-scroll .study-table td:first-child{min-width:90px}.fs-viewport svg{font-family:system-ui}</style></head>
 <body><main><h1>SimuSystem v49 · sequência de atuação</h1><p>Verificação isolada com exemplo didático. Nenhum diagrama publicado é alterado.</p><button id="openPreview">Abrir estudo</button></main>
 <dialog id="previewSequenceBox" class="study-box fault-sequence-box"><div class="history-head"><h2>Curto e sequência de atuação</h2><div class="grow"></div><button type="button" id="closePreview">Fechar</button></div><div id="faultSequenceWorkbench"></div></dialog>
 <script type="module">
-import { attachFaultSequenceWorkbench } from "../src/fault-sequence-workbench.js?v=49";
-import { sequenceExample } from "../src/fault-sequence.js?v=49";
+import { attachFaultSequenceWorkbench } from "../src/fault-sequence-workbench.js?v=49.1";
+import { sequenceExample } from "../src/fault-sequence.js?v=49.1";
 const dialog=document.getElementById("previewSequenceBox");
 const workbench=attachFaultSequenceWorkbench({dialog,getDiagram:sequenceExample,getScope:()=>"preview-v49",onOpen:()=>{}});
 document.getElementById("openPreview").onclick=()=>workbench.open();

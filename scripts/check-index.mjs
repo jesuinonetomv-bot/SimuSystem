@@ -27,16 +27,16 @@ for (const id of ["pcSavedCases", "pcRun", "pcTabConfig", "pcTabDevices", "pcTab
 
 const sw = readFileSync(new URL("sw.js", root), "utf8");
 new Script(sw, { filename: "sw.js" });
-assert.ok(sw.includes('"./src/switching-analysis.js?v=49"'),
+assert.ok(sw.includes('"./src/switching-analysis.js?v=49.1"'),
   "Switching analysis must be in the offline asset list");
 assert.ok(sw.includes('"./src/diagram-gestures.js?v=42"'),
   "Diagram gestures must be in the offline asset list");
 assert.ok(sw.includes('"./src/session-timeout.js?v=40"'),
   "Session timeout must be in the offline asset list");
-assert.ok(sw.includes('"./src/flow-animation.js?v=49"'),
+assert.ok(sw.includes('"./src/flow-animation.js?v=49.1"'),
   "Animated flow must be in the offline asset list");
 for (const name of ["fault-analysis.js", "fault-sequence.js", "fault-sequence-workbench.js", "fault-data.js", "sequence-fields.js", "equipment-library.js", "component-editor.js", "power-flow.js", "study-network.js", "electrical-studies.js", "technical-symbols.js", "study-workbench.js", "workbench.css", "display-theme.js", "load-flow-workbench.js", "study-cases.js", "study-example.js", "short-circuit.js", "short-circuit-cases.js", "short-circuit-workbench.js", "protection-coordination.js", "protection-chart.js", "protection-workbench.js"])
-  assert.ok(sw.includes('"./src/' + name + '?v=49"'), "Missing study asset in offline cache: " + name);
+  assert.ok(sw.includes('"./src/' + name + '?v=49.1"'), "Missing study asset in offline cache: " + name);
 for (const file of ["fault-analysis.js", "fault-sequence.js", "fault-sequence-workbench.js", "fault-data.js", "sequence-fields.js", "equipment-library.js", "component-editor.js", "power-flow.js", "study-network.js", "electrical-studies.js", "study-workbench.js", "study-cases.js", "study-example.js", "load-flow-workbench.js", "display-theme.js", "short-circuit.js", "short-circuit-cases.js", "short-circuit-workbench.js", "protection-coordination.js", "protection-chart.js", "protection-workbench.js"]) {
   const source = readFileSync(new URL("src/" + file, root), "utf8");
   for (const entry of source.matchAll(/from\s+["'](\.\/[^"']+)["']/g)) {

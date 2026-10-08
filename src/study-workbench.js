@@ -1,7 +1,7 @@
-import { attachProtectionWorkbench } from "./protection-workbench.js?v=49";
+import { attachProtectionWorkbench } from "./protection-workbench.js?v=49.1";
 
-import { attachShortCircuitWorkbench } from "./short-circuit-workbench.js?v=49";
-import { attachFaultSequenceWorkbench } from "./fault-sequence-workbench.js?v=49";
+import { attachShortCircuitWorkbench } from "./short-circuit-workbench.js?v=49.1";
+import { attachFaultSequenceWorkbench } from "./fault-sequence-workbench.js?v=49.1";
 
 export function attachStudyWorkbench({ getDiagram, getScope, networkOptions, openPowerFlow, setOverlay, onOpen, onClose }) {
   const $ = (id) => document.getElementById(id);

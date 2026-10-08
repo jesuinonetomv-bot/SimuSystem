@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SimuSystem v48 · Componentes</title><link rel="stylesheet" href="../src/workbench.css?v=49">
+<title>SimuSystem v48 · Componentes</title><link rel="stylesheet" href="../src/workbench.css?v=49.1">
 <style>
 body { margin: 0; background: #eef3f9; color: #203449; font: 14px system-ui; }
 main { max-width: 1040px; margin: 25px auto; padding: 0 24px; }
@@ -23,10 +23,10 @@ a { color: #245b9c; }.local-note { color: #6b8195; font-size: 12px; }
 <div class="proof"><strong>Integração dos dados aos estudos</strong><p id="cableSummary"></p><p id="flowSummary"></p><p id="relaySummary"></p></div>
 <p class="local-note">Página de verificação da interface. Alterações aqui são locais e não modificam diagramas publicados. As limitações de cada componente aparecem no cadastro.</p>
 </main><script type="module">
-import { EQUIPMENT_CATALOG, createEquipment, cableEquivalent, relayCoordinationProfile } from "../src/equipment-library.js?v=49";
-import { attachComponentEditor } from "../src/component-editor.js?v=49";
-import { renderTechnicalSymbol } from "../src/technical-symbols.js?v=49";
-import { solveDiagramPowerFlow } from "../src/power-flow.js?v=49";
+import { EQUIPMENT_CATALOG, createEquipment, cableEquivalent, relayCoordinationProfile } from "../src/equipment-library.js?v=49.1";
+import { attachComponentEditor } from "../src/component-editor.js?v=49.1";
+import { renderTechnicalSymbol } from "../src/technical-symbols.js?v=49.1";
+import { solveDiagramPowerFlow } from "../src/power-flow.js?v=49.1";
 const NS = "http://www.w3.org/2000/svg", E = (tag, attrs = {}, value) => { const el = document.createElementNS(NS, tag); for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v); if (value != null) el.textContent = value; return el; };
 const diagram = { name: "Verificação de componentes", items: {} };
 for (const type of Object.keys(EQUIPMENT_CATALOG)) diagram.items[type] = createEquipment(type, { x: 35, y: 48 }, { x: 35, y: 83 });

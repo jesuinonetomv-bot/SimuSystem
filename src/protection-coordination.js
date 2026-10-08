@@ -1,5 +1,5 @@
-import { PROTECTION_CURVES, protectionResponse } from "./electrical-studies.js?v=49";
-import { relayCoordinationProfile } from "./equipment-library.js?v=49";
+import { PROTECTION_CURVES, protectionResponse } from "./electrical-studies.js?v=49.1";
+import { relayCoordinationProfile } from "./equipment-library.js?v=49.1";
 
 // A declared series path is study data. These cases never issue switching commands.
 export const DEFAULT_COORDINATION_CASE = {

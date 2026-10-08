@@ -1,4 +1,4 @@
-import { buildStudyNetwork } from "./study-network.js?v=49";
+import { buildStudyNetwork } from "./study-network.js?v=49.1";
 
 const C = (re = 0, im = 0) => ({ re, im });
 const add = (a, b) => C(a.re + b.re, a.im + b.im);
