@@ -57,6 +57,11 @@ proteção de terra ou deslocamento de sequência zero. Nenhum cálculo comanda
 contatos, altera os dados da operação ou certifica seletividade integral.
 O material de referência fornecido pelo usuário não é redistribuído.
 
+Atualização offline: a instalação do service worker renova os arquivos sem
+reusar uma cópia HTTP antiga. Navegações online renovam o HTML e a entrada
+offline comum entre `/` e `index.html`; uma página de prévia não pode substituir
+essa entrada. Erros HTTP não sobrescrevem o último HTML válido.
+
 ## Curto-circuito ANSI / IEC (v46)
 
 Em **Estudos → Curto-circuito · ANSI / IEC**, configure casos de falta trifásica
