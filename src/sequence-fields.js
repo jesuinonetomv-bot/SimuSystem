@@ -1,5 +1,5 @@
-import { sequenceFields, sequenceNote } from "./fault-data.js?v=49.1";
-import { validateProtection } from "./electrical-studies.js?v=49.1";
+import { sequenceFields, sequenceNote } from "./fault-data.js?v=49.2";
+import { validateProtection } from "./electrical-studies.js?v=49.2";
 
 // Extend the existing equipment form without replacing its other electrical data.
 export function attachSequenceFields(form) {

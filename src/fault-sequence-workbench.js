@@ -1,9 +1,9 @@
-import { FAULT_TYPES, DEFAULT_SEQUENCE_CASE, normalizeSequenceCase } from "./fault-analysis.js?v=49.1";
-import { simulateFaultSequence, sequenceExample, SEQUENCE_STATUS, PROTECTION_STATUS, sequenceReportCSV, sequenceReportText } from "./fault-sequence.js?v=49.1";
-import { createSwitchingStudy } from "./switching-analysis.js?v=49.1";
-import { renderTechnicalSymbol, renderInstrumentLinks } from "./technical-symbols.js?v=49.1";
+import { FAULT_TYPES, DEFAULT_SEQUENCE_CASE, normalizeSequenceCase } from "./fault-analysis.js?v=49.2";
+import { simulateFaultSequence, sequenceExample, SEQUENCE_STATUS, PROTECTION_STATUS, sequenceReportCSV, sequenceReportText } from "./fault-sequence.js?v=49.2";
+import { createSwitchingStudy } from "./switching-analysis.js?v=49.2";
+import { renderTechnicalSymbol, renderInstrumentLinks } from "./technical-symbols.js?v=49.2";
 import { attachDiagramGestures } from "./diagram-gestures.js?v=42";
-import { equipmentTypeLabel, isInstrument } from "./equipment-library.js?v=49.1";
+import { equipmentTypeLabel, isInstrument } from "./equipment-library.js?v=49.2";
 
 export function attachFaultSequenceWorkbench({ dialog, getDiagram, getScope, networkOptions = {}, onOpen }) {
   const host = dialog.querySelector("#faultSequenceWorkbench"), $ = id => host.querySelector("#" + id);
@@ -138,7 +138,7 @@ export function attachFaultSequenceWorkbench({ dialog, getDiagram, getScope, net
           ["breaker", "disconnector", "fuse", "utility"].includes(o.type) ? "left" : "right";
         const position = o.labelPosition || defaultPosition;
         const [dx, dy, anchor] = { above: [0, -32, "middle"], below: [0, 38, "middle"], left: [-30, -12, "end"], right: [30, -12, "start"] }[position] || [30, -12, "start"];
-        g.append(E("text", { x: x + dx + (+o.tagX || 0), y: y + dy + (+o.tagY || 0), class: "tag", style: "font-size:" + fs + "px", "text-anchor": anchor }, o.name || equipmentTypeLabel(o.type)));
+        g.append(E("text", { x: x + dx + (+o.tagX || 0), y: y + dy + (+o.tagY || 0), class: "tag", style: "font-size:" + fs + "px;text-anchor:" + anchor }, o.name || equipmentTypeLabel(o.type)));
       }
       svg.append(g);
     }

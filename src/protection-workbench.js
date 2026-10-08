@@ -1,9 +1,9 @@
-import { PROTECTION_CURVES } from "./electrical-studies.js?v=49.1";
+import { PROTECTION_CURVES } from "./electrical-studies.js?v=49.2";
 import { DEFAULT_COORDINATION_CASE, COORDINATION_STATUS, coordinationDevice, coordinationExample,
   normalizeCoordinationCase, analyzeCoordination, loadCoordinationCases, saveCoordinationCases,
-  coordinationReportCSV, coordinationReportText } from "./protection-coordination.js?v=49.1";
-import { coordinationChart, PROTECTION_COLORS } from "./protection-chart.js?v=49.1";
-import { relayCoordinationProfile } from "./equipment-library.js?v=49.1";
+  coordinationReportCSV, coordinationReportText } from "./protection-coordination.js?v=49.2";
+import { coordinationChart, PROTECTION_COLORS } from "./protection-chart.js?v=49.2";
+import { relayCoordinationProfile } from "./equipment-library.js?v=49.2";
 
 export function attachProtectionWorkbench({ dialog, getDiagram, getScope, onOpen }) {
   const host = dialog.querySelector("#protectionWorkbench"), $ = id => dialog.querySelector("#" + id);
