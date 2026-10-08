@@ -1,6 +1,7 @@
 // Balanced, positive-sequence training model. Connectivity comes from the
 // switching graph, so an open contact and a connector mean the same in all modes.
-import { createSwitchingStudy } from "./switching-analysis.js?v=41";
+import { createSwitchingStudy } from "./switching-analysis.js?v=48";
+import { equipmentDefaults, cableEquivalent } from "./equipment-library.js?v=48";
 
 const positive = (v) => v !== null && v !== "" && Number.isFinite(+v) && +v > 0;
 const finite = (v) => v !== null && v !== "" && Number.isFinite(+v);
@@ -14,7 +15,8 @@ export function studyElectricalData(o) {
     capacitor: { capacitorMvar: 5, capacitorStages: 1 },
     turbogenerator: { generatorRatedMVA: 35, generationMW: 20, generationMvar: 0 },
   };
-  return { ...common, ...defaults[o.type], ...o.electrical };
+  const data = { ...common, ...equipmentDefaults(o.type), ...defaults[o.type], ...o.electrical };
+  return o.type === "cable" ? { ...data, ...cableEquivalent(data) } : data;
 }
 
 export function buildStudyNetwork(diagram, options = {}) {
@@ -93,13 +95,13 @@ export function buildStudyNetwork(diagram, options = {}) {
     if (o?.type === "transformer" && from === to) {
       error(edge.id, "primário e secundário estão ligados ao mesmo nó"); continue;
     }
-    if (from === to || !o || !["transformer", "line"].includes(o.type)) continue;
+    if (from === to || !o || !["transformer", "line", "cable"].includes(o.type)) continue;
     branches.push({ from, to, itemId: edge.id, name: name(edge.id), type: o.type, edge });
   }
   // A line keeps the voltage base; a transformer has independent winding bases.
   for (let pass = 0; pass < buses.length; pass++) {
     let changed = false;
-    for (const br of branches) if (br.type === "line") {
+    for (const br of branches) if (["line", "cable"].includes(br.type)) {
       const a = buses[br.from], b = buses[br.to];
       if (a.kv !== null && b.kv === null) { b.kv = a.kv; changed = true; }
       if (b.kv !== null && a.kv === null) { a.kv = b.kv; changed = true; }
@@ -112,13 +114,13 @@ export function buildStudyNetwork(diagram, options = {}) {
   for (const br of branches) {
     const o = items[br.itemId], e = electricalData(o), edge = br.edge;
     br.tap = 1; br.r = 0; br.x = 0;
-    if (!edge.known) { error(br.itemId, "impedância inválida"); continue; }
-    if (br.type === "line") {
+    if (!edge.known) { error(br.itemId, "impedância inválida ou não cadastrada"); continue; }
+    if (["line", "cable"].includes(br.type)) {
       if (Math.abs(buses[br.from].kv - buses[br.to].kv) > 1e-5 * buses[br.from].kv)
         error(br.itemId, "linha entre bases de tensão diferentes");
       const zbase = buses[br.from].kv ** 2 / baseMVA;
       br.r = edge.resistanceOhm / zbase; br.x = edge.reactanceOhm / zbase;
-      br.ampacityA = o.electrical?.ampacityA;
+      br.ampacityA = br.type === "cable" ? cableEquivalent({ ...equipmentDefaults("cable"), ...o.electrical }).ampacityA : o.electrical?.ampacityA;
     } else {
       if (!positive(e.ratedMVA) || !positive(e.impedancePercent) || !positive(e.transformerXR) ||
           (!shortCircuit && (!finite(e.tapPercent) || 1 + +e.tapPercent / 100 <= 0))) {
@@ -140,7 +142,7 @@ export function buildStudyNetwork(diagram, options = {}) {
   for (const [id, ps] of ports) {
     const o = items[id], e = electricalData(o), b = buses[at(ps[0])];
     const scale = finite(o.runtimeScale) ? +o.runtimeScale : 1;
-    if (!shortCircuit && o.type === "load" && o.state === "active") {
+    if (!shortCircuit && ["load", "motor"].includes(o.type) && o.state === "active") {
       if (!finite(e.activePowerMW) || +e.activePowerMW < 0 || !positive(e.powerFactor) || +e.powerFactor > 1 || scale < 0) {
         error(id, "potência ou fator de potência inválido"); continue;
       }

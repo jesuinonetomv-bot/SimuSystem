@@ -1331,7 +1331,7 @@
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
     </style>
-    <link rel="stylesheet" href="./src/workbench.css?v=47" />
+    <link rel="stylesheet" href="./src/workbench.css?v=48" />
   </head>
   <body>
     <header>
@@ -1364,7 +1364,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v47</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v48</span>
     </nav>
     <div class="workspace" id="workspace">
       <aside class="side ribbon">
@@ -1536,9 +1536,23 @@
             </button>
           </div>
           <div class="group">
+            <span class="group-title">Medição e proteção</span>
+            <button class="tool" data-tool="relay"><b>50/51</b>Relé</button>
+            <button class="tool" data-tool="ct"><b>TC</b>TC</button>
+            <button class="tool" data-tool="vt"><b>TP</b>TP</button>
+            <button class="tool" data-tool="cbct"><b>ΣI</b>TC toroidal</button>
+            <button class="tool" data-tool="fuse"><b>▯</b>Fusível</button>
+          </div>
+          <div class="group">
+            <span class="group-title">Instalação</span>
+            <button class="tool" data-tool="motor"><b>Ⓜ</b>Motor</button>
+            <button class="tool" data-tool="surgeArrester"><b>ϟ</b>Para-raios</button>
+            <button class="tool" data-tool="ground"><b>⏚</b>Aterramento</button>
+          </div>
+          <div class="group">
             <span class="group-title">Desenho</span
             ><button class="tool" data-tool="bus"><b>━</b>Barramento</button
-            ><button class="tool" data-tool="line"><b>─</b>Conexão</button>
+            ><button class="tool" data-tool="line"><b>─</b>Conexão</button><button class="tool" data-tool="cable"><b>═</b>Cabo</button>
           </div>
           <div class="group">
             <span class="group-title">Anotações</span
@@ -2553,14 +2567,16 @@
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
-      import { attachLoadFlowWorkbench } from "./src/load-flow-workbench.js?v=47";
-      import { attachThemeEditor } from "./src/display-theme.js?v=47";
-      import { renderTechnicalSymbol } from "./src/technical-symbols.js?v=47";
-      import { attachStudyWorkbench } from "./src/study-workbench.js?v=47";
-      import { createSwitchingStudy } from "./src/switching-analysis.js?v=41";
+      import { attachLoadFlowWorkbench } from "./src/load-flow-workbench.js?v=48";
+      import { attachThemeEditor } from "./src/display-theme.js?v=48";
+      import { EQUIPMENT_CATALOG, createEquipment, equipmentDefaults, cableEquivalent, isCatalogEquipment, isInstrument, remapInstrumentLinks, instrumentReadout, instrumentLinkIssues } from "./src/equipment-library.js?v=48";
+      import { attachComponentEditor } from "./src/component-editor.js?v=48";
+      import { renderTechnicalSymbol, renderInstrumentLinks } from "./src/technical-symbols.js?v=48";
+      import { attachStudyWorkbench } from "./src/study-workbench.js?v=48";
+      import { createSwitchingStudy } from "./src/switching-analysis.js?v=48";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
-      import { calculateAnimatedFlow, createFlowAnimator } from "./src/flow-animation.js?v=41";
+      import { calculateAnimatedFlow, createFlowAnimator } from "./src/flow-animation.js?v=48";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -3374,6 +3390,11 @@
       enableFaceplateDrag($("#cmd"));
       enableFaceplateDrag($("#busBox"));
       function terminals(o) {
+        if (["relay", "ct", "vt", "cbct", "surgeArrester", "ground"].includes(o.type)) return [];
+        if (o.type === "fuse") {
+          const z = (o.scale || 1) * 22, r = (o.rotation || 0) * Math.PI / 180;
+          return [{ x: o.x + Math.sin(r) * z, y: o.y - Math.cos(r) * z }, { x: o.x - Math.sin(r) * z, y: o.y + Math.cos(r) * z }];
+        }
         if (o.type === "breaker" || o.type === "disconnector") {
           const z = (o.scale || 1) * 22,
             r = ((o.rotation || 0) * Math.PI) / 180,
@@ -3406,7 +3427,7 @@
             },
           ];
         }
-        if (o.type === "load" || o.type === "capacitor") {
+        if (["load", "motor"].includes(o.type) || o.type === "capacitor") {
           const z = o.scale || 1,
             r = ((o.rotation || 0) * Math.PI) / 180,
             lx = 0,
@@ -3611,7 +3632,7 @@
             const k = q.shift(),
               o = diagram.items[k];
             if (o.isSource) source = true;
-            if (o.type === "load" && o.state === "active") load = true;
+            if (["load", "motor"].includes(o.type) && o.state === "active") load = true;
             for (const n of graph.get(k) || [])
               if (!seen.has(n)) {
                 seen.add(n);
@@ -3626,8 +3647,9 @@
         return (a.source && b.load) || (b.source && a.load);
       }
       const isElectrical = (o) =>
-        !["annotationLine", "area", "text"].includes(o.type);
+        ["bus", "line", "cable", "breaker", "disconnector", "fuse", "transformer", "utility", "turbogenerator", "load", "motor", "capacitor"].includes(o.type);
       function electricalDefaults(o) {
+        if (["cable", "relay", "ct", "vt", "cbct", "fuse", "surgeArrester", "ground"].includes(o.type)) return equipmentDefaults(o.type);
         const base = {
           nominalKV: 13.8,
           frequencyHz: 60,
@@ -3663,7 +3685,7 @@
             tapPercent: 0,
             transformerXR: 10,
           };
-        if (o.type === "load")
+        if (["load", "motor"].includes(o.type))
           return {
             ...base,
             activePowerMW: 1,
@@ -3702,8 +3724,9 @@
         return base;
       }
       function electricalData(o) {
-        const data = { ...electricalDefaults(o), ...(o.electrical || {}) },
-          dist =
+        const data = { ...electricalDefaults(o), ...(o.electrical || {}) };
+        if (o.type === "cable") Object.assign(data, cableEquivalent(data));
+        const dist =
             o.type === "utility" && o.operatorDisturbance?.active
               ? o.operatorDisturbance
               : null;
@@ -3750,7 +3773,7 @@
           adj[b].push(a);
         }
         const switches = entries.filter(
-          ([, o]) => o.type === "breaker" || o.type === "disconnector",
+          ([, o]) => o.type === "breaker" || o.type === "disconnector" || o.type === "fuse",
         );
         for (const [k, o] of entries) {
           if (o.type !== "line" && o.type !== "bus") continue;
@@ -3791,6 +3814,7 @@
             if (!blocked) edge(ns[i], ns[i + 1]);
           }
         }
+        for (const [, o] of entries) if (o.type === "cable") { const t = terminals(o); edge(node(t[0]), node(t[1])); }
         for (const [, o] of switches)
           if (o.state === "closed") {
             const t = terminals(o);
@@ -3838,7 +3862,7 @@
           if (
             o.type === "transformer" ||
             o.type === "breaker" ||
-            o.type === "disconnector"
+            o.type === "disconnector" || o.type === "fuse"
           )
             continue;
           const cs = [
@@ -3859,7 +3883,7 @@
           conductive = entries.filter(
             ([, o]) =>
               !(
-                (o.type === "breaker" || o.type === "disconnector") &&
+                (o.type === "breaker" || o.type === "disconnector" || o.type === "fuse") &&
                 o.state !== "closed"
               ),
           ),
@@ -3952,7 +3976,7 @@
             source = false;
           for (const k of seen) {
             const o = diagram.items[k];
-            if (o.type === "load" || o.type === "capacitor") {
+            if (["load", "motor"].includes(o.type) || o.type === "capacitor") {
               const v = loadValues(o);
               pLoad += v.p;
               qLoad += v.q;
@@ -4004,7 +4028,7 @@
               .map(generatorValues)
               .filter((v) => v.running),
             loads = objects.filter(
-              (o) => o.type === "load" || o.type === "capacitor",
+              (o) => ["load", "motor"].includes(o.type) || o.type === "capacitor",
             ),
             energized = external.length > 0 || gens.length > 0;
           let pLoad = 0,
@@ -4208,7 +4232,7 @@
               source = false;
             for (const n of regionSeen) {
               const item = diagram.items[n];
-              if (item.type === "load") {
+              if (["load", "motor"].includes(item.type)) {
                 const v = loadValues(item);
                 lp += v.p;
                 lq += v.q;
@@ -4240,7 +4264,7 @@
                 mappedSecondary && hasExplicitTopology(mappedSecondary),
               openAdjacent = Object.values(diagram.items || {}).some(
                 (item) =>
-                  (item.type === "breaker" || item.type === "disconnector") &&
+                  (item.type === "breaker" || item.type === "disconnector" || item.type === "fuse") &&
                   item.state !== "closed" &&
                   touching(item, diagram.items[k]),
               ),
@@ -4335,7 +4359,7 @@
             const zoneSet = new Set(zone),
               zoneLoads = zone.filter(
                 (k) =>
-                  diagram.items[k].type === "load" ||
+                  ["load", "motor"].includes(diagram.items[k].type) ||
                   diagram.items[k].type === "capacitor",
               ),
               zoneTGs = zone.filter(
@@ -4540,7 +4564,7 @@
                   (Math.sqrt(3) * voltage * 1000);
               loading = (apparent / rated) * 100;
               pf = apparent ? Math.abs(p) / apparent : 1;
-            } else if (o.type === "load" || o.type === "capacitor") {
+            } else if (["load", "motor"].includes(o.type) || o.type === "capacitor") {
               const v = effectiveLoadValues(o),
                 vf = Math.max(0.05, pu);
               p = v.p;
@@ -4604,7 +4628,7 @@
                 ((p < -0.0001 ? -1 : 1) * apparent * 1e6) /
                 (Math.sqrt(3) * Math.max(0.1, secondaryKV) * 1000);
               pf = apparent ? Math.abs(p) / apparent : 1;
-            } else if (o.type === "line") {
+            } else if (["line", "cable"].includes(o.type)) {
               const ends = terminals(o),
                 sa = sideBalance(k, ends[0], allowed),
                 sb = sideBalance(k, ends[1], allowed),
@@ -4624,7 +4648,7 @@
                 1 +
                 Math.max(0, 1 - frequency / Math.max(1, +e.frequencyHz || 60)) *
                   0.8;
-              loading = (current / Math.max(1, +e.ampacityA || 1000)) * 100;
+              loading = o.type === "cable" && !(e.ampacityA > 0) ? 0 : (current / Math.max(1, +e.ampacityA || 1000)) * 100;
               pf = apparent ? Math.abs(p) / apparent : 1;
             }
             results.set(k, {
@@ -4791,7 +4815,7 @@
           if (!hide("current"))
             lines.push("Corrente: " + r.currentA.toFixed(0) + " A");
           lines.push("Estágios: " + stages + "/" + (+e.capacitorStages || 1));
-        } else if (o.type === "load") {
+        } else if (["load", "motor"].includes(o.type)) {
           if (!hide("power"))
             lines.push(
               "Potência: " +
@@ -4809,10 +4833,10 @@
             lines.push("Tensão: " + r.voltageKV.toFixed(2) + " kV");
           if (!hide("frequency"))
             lines.push("Frequência: " + r.frequencyHz.toFixed(2) + " Hz");
-        } else if (o.type === "line") {
+        } else if (["line", "cable"].includes(o.type)) {
           lines.push(
             "Corrente: " + r.currentA.toFixed(0) + " A",
-            "Carregamento: " + r.loadingPercent.toFixed(0) + "%",
+            o.type === "cable" && !(electricalData(o).ampacityA > 0) ? "Limite de corrente: não cadastrado" : "Carregamento: " + r.loadingPercent.toFixed(0) + "%",
           );
         } else lines.push("Tensão: " + r.voltageKV.toFixed(2) + " kV");
         return lines;
@@ -4824,12 +4848,13 @@
         if (studyOverlay?.values.has(k)) {
           addStudyMeasurement(g, o, studyOverlay.values.get(k)); return;
         }
-        if ((eng && selected !== k) || !["bus", "transformer", "turbogenerator", "load", "capacitor"].includes(o.type)) return;
+        if ((eng && selected !== k) || !["bus", "transformer", "turbogenerator", "load", "motor", "capacitor", "cable", "ct", "vt", "cbct"].includes(o.type)) return;
         const style = $("#dataBlockResults").value;
         if (style === "off") return;
-        let raw = measurementLines(k, o, true);
+        let raw = isInstrument(o) ? instrumentReadout(o, diagram.items, electricalResults) : measurementLines(k, o, true);
+        if (isInstrument(o) && o.hiddenMeasurements?.[o.type === "vt" ? "voltage" : "current"]) raw = [];
         if (style === "compact") {
-          raw = raw.filter(line => /^(Relação:|Tensão:|Corrente:|Potência ativa:|Potência reativa:|Desenergizado)/.test(line));
+          raw = raw.filter(line => /^(TC ideal|TP ideal|Relação:|Tensão:|Corrente:|Potência ativa:|Potência reativa:|Desenergizado)/.test(line));
           const p = raw.find(line => line.startsWith("Potência ativa:")), q = raw.find(line => line.startsWith("Potência reativa:"));
           raw = raw.filter(line => !line.startsWith("Potência ativa:") && !line.startsWith("Potência reativa:"));
           if (p || q) raw.push([p?.replace("Potência ativa: ", "P "), q?.replace("Potência reativa: ", "Q ")].filter(Boolean).join(" · "));
@@ -4838,7 +4863,7 @@
           line.includes(": ") ? line.slice(line.indexOf(": ") + 2) : line);
         if (!lines.length) return;
         const base =
-            o.type === "bus"
+            ["bus", "cable"].includes(o.type)
               ? { x: (o.x1 + o.x2) / 2, y: (o.y1 + o.y2) / 2 + 24 }
               : { x: o.x, y: o.y + (o.type === "transformer" ? 72 : 55) },
           p = {
@@ -4857,8 +4882,8 @@
         g.append(text);
       }
       function addStudyMeasurement(g, o, lines) {
-        const x = (["bus", "line"].includes(o.type) ? (o.x1 + o.x2) / 2 : o.x) + (+o.measurementX || 0),
-          y = (["bus", "line"].includes(o.type) ? (o.y1 + o.y2) / 2 + 24 : o.y + 55) + (+o.measurementY || 0);
+        const x = (["bus", "line", "cable"].includes(o.type) ? (o.x1 + o.x2) / 2 : o.x) + (+o.measurementX || 0),
+          y = (["bus", "line", "cable"].includes(o.type) ? (o.y1 + o.y2) / 2 + 24 : o.y + 55) + (+o.measurementY || 0);
         const text = E("text", { x, y, class: "measurement study-result", "text-anchor": "middle" });
         lines.forEach((line, i) => text.append(E("tspan", { x, dy: i ? 14 : 0 }, line)));
         g.append(text);
@@ -5110,6 +5135,7 @@
               if (item.topology.terminalB)
                 item.topology.terminalB = prefix + item.topology.terminalB;
             }
+            if (item.instrument) item.instrument = remapInstrumentLinks(item, target => prefix + target).instrument;
             merged.items[id] = item;
           }
         }
@@ -5158,7 +5184,7 @@
       function alarmCommand(o, message) {
         if (o.type === "breaker" || o.type === "disconnector")
           return o.state === "open" ? "ABRIR" : "FECHAR";
-        if (o.type === "load") return "PERDA DE ENERGIA";
+        if (["load", "motor"].includes(o.type)) return "PERDA DE ENERGIA";
         if (/sequência/i.test(message)) return "SEQUÊNCIA DE MANOBRA";
         if (/sobrecarga/i.test(message)) return "SOBRECARGA";
         if (/desenerg|perdeu/i.test(message)) return "DESENERGIZAÇÃO";
@@ -5198,7 +5224,7 @@
               ? "TURBOGERADOR"
               : o.type === "utility"
                 ? "CONCESSIONÁRIA"
-                : o.type === "load"
+                : ["load", "motor"].includes(o.type)
                   ? "CARGA"
                   : "BARRAMENTO";
         $("#alarmTag").textContent = o.name || fallback;
@@ -5342,7 +5368,7 @@
         if (!o) return "";
         if (o.type === "breaker" || o.type === "disconnector")
           return o.state === "closed" ? "open" : "closed";
-        if (o.type === "load") return o.state === "active" ? "inactive" : "active";
+        if (["load", "motor"].includes(o.type)) return o.state === "active" ? "inactive" : "active";
         if (o.type === "utility" || o.type === "turbogenerator")
           return o.state === "stopped" || o.isSource === false ? "running" : "stopped";
         return "";
@@ -5530,7 +5556,7 @@
             o,
             o.type === "transformer"
               ? "O transformador foi desenergizado sem estar liberado para manutenção."
-              : o.type === "load"
+              : ["load", "motor"].includes(o.type)
                 ? "A carga estava em operação e perdeu a energização."
                 : "O barramento perdeu a energização sem estar liberado para manutenção.",
           );
@@ -5540,13 +5566,13 @@
         lastFlow = new Set(live);
         if (eng) return;
         for (const [k, o] of Object.entries(diagram.items || {})) {
-          if (o.type !== "bus" && o.type !== "transformer" && o.type !== "load")
+          if (o.type !== "bus" && o.type !== "transformer" && !["load", "motor"].includes(o.type))
             continue;
           const energized = lastFlow.has(k),
             maint = maintenance[k] === true || o.inMaintenance === true,
-            isActiveLoad = o.type === "load" && o.state === "active",
+            isActiveLoad = ["load", "motor"].includes(o.type) && o.state === "active",
             current =
-              o.type === "load" && !isActiveLoad
+              ["load", "motor"].includes(o.type) && !isActiveLoad
                 ? "inactive"
                 : energized
                   ? maint
@@ -5677,6 +5703,7 @@
         monitorTransformerOverload(evaluateAlarm);
         monitorTransformerOverflux(evaluateAlarm);
         monitorGeneratorOverload(evaluateAlarm);
+        if (eng) renderInstrumentLinks(stage, diagram, selectedIds, E);
         const list = Object.entries(diagram.items || {});
         $("#empty").hidden = !!list.length;
         for (const [k, o] of list) {
@@ -5702,8 +5729,8 @@
             "data-id": k,
           });
           if (renderTechnicalSymbol(g, o, E)) {
-            const labelDistance = { utility: 62, transformer: 58, turbogenerator: 52, load: 50, capacitor: 50 }[o.type] || 36;
-            addLabels(g, o, o.x, o.y, labelDistance * (o.scale || 1));
+            const labelDistance = { utility: 62, transformer: 58, turbogenerator: 52, load: 50, motor: 50, capacitor: 50 }[o.type] || 36;
+            addLabels(g, o, o.x ?? (o.x1 + o.x2) / 2, o.y ?? (o.y1 + o.y2) / 2, o.type === "cable" ? 18 : labelDistance * (o.scale || 1));
           } else if (o.type === "annotationLine") {
             g.append(
               E("line", {
@@ -5932,7 +5959,7 @@
       function updateManualControl(k, o) {
         const enabled =
             o &&
-            (o.type === "load" ||
+            (["load", "motor"].includes(o.type) ||
               o.type === "turbogenerator" ||
               o.type === "capacitor"),
           box = $("#manualControl");
@@ -5962,7 +5989,7 @@
             " MVAr";
         } else
           $("#manualValue").textContent =
-            o.type === "load"
+            ["load", "motor"].includes(o.type)
               ? "Corrente ajustada: " + (r?.currentA || 0).toFixed(0) + " A"
               : manual
                 ? "Referência manual: " +
@@ -5978,12 +6005,12 @@
         if (
           !o ||
           !operatorSession ||
-          !["load", "turbogenerator", "capacitor"].includes(o.type)
+          !["load", "motor", "turbogenerator", "capacitor"].includes(o.type)
         )
           return;
         const data = electricalData(o);
         o.electrical = { ...(o.electrical || {}) };
-        if (o.type === "load") {
+        if (["load", "motor"].includes(o.type)) {
           const r = electricalResults.get(k),
             step = Math.max(1, +data.currentStepA || 5),
             min = Math.max(0, +data.minCurrentA || 0),
@@ -6109,6 +6136,7 @@
         const o = diagram.items[k];
         $("#utilityDisturbance").hidden = o.type !== "utility";
         if (!eng) {
+          if (isCatalogEquipment(o) && o.type !== "motor") { componentEditor.open(k); return; }
           if (!operatorSession) {
             $("#status").textContent =
               "Modo de visualização — entre como operador para executar comandos";
@@ -6157,7 +6185,7 @@
               "Use os botões − e + para retirar ou inserir estágios.";
             $("#cmdOk").hidden = true;
             $("#cmd").showModal();
-          } else if (o.type === "load") {
+          } else if (["load", "motor"].includes(o.type)) {
             pending = k;
             const active = o.state === "active";
             $("#fpTag").textContent = o.name || "CARGA";
@@ -6321,16 +6349,7 @@
           for (const [id, copy] of copies) {
             const item = diagram.items[id];
             if (!item) continue;
-            if (
-              item.type === "breaker" ||
-              item.type === "transformer" ||
-              item.type === "turbogenerator" ||
-              item.type === "disconnector" ||
-              item.type === "load" ||
-              item.type === "utility" ||
-              item.type === "capacitor" ||
-              item.type === "text"
-            ) {
+            if (item.x != null && item.y != null) {
               item.x = copy.x + dx;
               item.y = copy.y + dy;
             } else {
@@ -6352,17 +6371,7 @@
       }
       function itemBounds(o) {
         const z = o.scale || 1;
-        if (
-          [
-            "breaker",
-            "disconnector",
-            "transformer",
-            "turbogenerator",
-            "utility",
-            "load",
-            "capacitor",
-          ].includes(o.type)
-        )
+        if (o.x != null && o.y != null && o.type !== "text")
           return {
             x1: o.x - 50 * z,
             y1: o.y - 60 * z,
@@ -6456,10 +6465,13 @@
         if (e.pointerType === "touch" && tool === "select") return;
         if (!diagram.items || typeof diagram.items !== "object") diagram.items = {};
         let p = pt(e);
-        if (tool === "line" || tool === "bus") p = snapConnection(p);
+        if (["line", "bus", "cable"].includes(tool)) p = snapConnection(p);
         if (tool === "select") {
           marqueeSelect(e, p);
           return;
+        } else if (EQUIPMENT_CATALOG[tool] && tool !== "cable") {
+          pushHistory(); const k = newId(); diagram.items[k] = createEquipment(tool, p);
+          selected = k; selectedIds = new Set([k]); choose("select"); local();
         } else if (tool === "breaker") {
           pushHistory();
           const k = newId();
@@ -6590,6 +6602,7 @@
           local();
         } else if (
           tool === "line" ||
+          tool === "cable" ||
           tool === "bus" ||
           tool === "annotationLine" ||
           tool === "area"
@@ -6598,6 +6611,7 @@
             start = p;
             draw();
           } else {
+            if (tool === "cable" && d2(start, p) < 1) { $("#status").textContent = "Escolha um segundo ponto para o cabo."; return; }
             pushHistory();
             const k = newId();
             diagram.items[k] = {
@@ -6618,6 +6632,7 @@
                   : "#111111",
               fontSize: 14,
             };
+            if (tool === "cable") diagram.items[k] = createEquipment("cable", start, p);
             start = null;
             selected = k;
             selectedIds = new Set([k]);
@@ -6666,7 +6681,7 @@
             "turbogenerator",
             "utility",
             "bus",
-            "load",
+            "load", "motor", "cable", "ct", "vt", "cbct",
             "capacitor",
           ].includes(o.type),
           visibleByType =
@@ -6696,7 +6711,7 @@
                 "frequency",
               ],
               bus: ["voltage", "frequency"],
-              load: ["current", "power", "powerFactor"],
+              load: ["current", "power", "powerFactor"], motor: ["current", "power", "powerFactor"], cable: ["current", "loading"], ct: ["current"], vt: ["voltage"], cbct: ["current"],
               capacitor: ["voltage", "current", "power"],
             }[o.type] || [];
         $("#measurementPositionBox").hidden = !measured;
@@ -6723,7 +6738,7 @@
         $("#stateBox").hidden = !(
           o.type === "breaker" || o.type === "disconnector"
         );
-        $("#loadStateBox").hidden = o.type !== "load";
+        $("#loadStateBox").hidden = !["load", "motor"].includes(o.type);
         $("#sourceBox").hidden = !(
           o.type === "line" ||
           o.type === "bus" ||
@@ -6731,10 +6746,10 @@
         );
         $("#isSource").checked = !!o.isSource;
         $("#geometryBox").hidden = false;
-        $("#electricalBtn").hidden = !isElectrical(o);
+        $("#electricalBtn").hidden = !(isElectrical(o) || isCatalogEquipment(o));
         if (o.type === "breaker" || o.type === "disconnector")
           $("#state").value = o.state;
-        if (o.type === "load") $("#loadState").value = o.state;
+        if (["load", "motor"].includes(o.type)) $("#loadState").value = o.state;
       }
       function pushHistory() {
         undoStack.push(JSON.stringify(diagram));
@@ -6851,6 +6866,8 @@
         diagram.items[selected].isSource = e.target.checked;
         local();
       };
+      const componentEditor = attachComponentEditor({ getDiagram: () => diagram, canEdit: () => eng,
+        onSave: (id, next) => { if (!eng || !diagram.items[id]) return; pushHistory(); diagram.items[id] = next; local(); $("#status").textContent = "Componente salvo"; } });
       const electricalNames = [
         "nominalKV",
         "frequencyHz",
@@ -6900,6 +6917,7 @@
       ];
       function openElectrical() {
         const o = diagram.items[selected];
+        if (o && isCatalogEquipment(o)) { componentEditor.open(selected); return; }
         if (!o || !isElectrical(o)) return;
         const e = electricalData(o),
           kind = o.type === "line" ? "line" : o.type;
@@ -6934,7 +6952,7 @@
         load: "carga",
         capacitor: "banco de capacitores",
         bus: "barramento",
-        line: "conexão",
+        line: "conexão", cable: "cabo", motor: "motor", fuse: "fusível",
       };
       function topologyLabel(id) {
         const o = diagram.items[id],
@@ -6976,7 +6994,7 @@
           return "Esta função exige um transformador em um dos terminais.";
         if (role === "bus_coupler" && (aType !== "bus" || bType !== "bus"))
           return "A interligação exige um barramento em cada terminal.";
-        if (role === "load_feeder" && !types.has("load") && !types.has("capacitor"))
+        if (role === "load_feeder" && !types.has("load") && !types.has("motor") && !types.has("capacitor"))
           return "O alimentador exige uma carga ou banco de capacitores.";
         if (role === "generator_breaker" && !types.has("turbogenerator"))
           return "Esta função exige um turbogerador em um dos terminais.";
@@ -7051,6 +7069,7 @@
         const issues = [],
           transformerAssignments = new Map();
         for (const [id, o] of Object.entries(diagram.items || {})) {
+          if (o.instrument) for (const issue of instrumentLinkIssues(o, diagram.items, id)) issues.push((o.name || id) + ": " + issue);
           if (!o.topology) continue;
           const role = o.topology.role || "generic",
             issue = topologyIssue(o, role, o.topology.terminalA, o.topology.terminalB);
@@ -7081,6 +7100,7 @@
             (removed.has(o.topology.terminalA) || removed.has(o.topology.terminalB))
           )
             delete o.topology;
+        for (const o of Object.values(diagram.items || {})) if (o.instrument) o.instrument = remapInstrumentLinks(o, id => removed.has(id) ? null : id).instrument;
         diagram.controlRules = controlRules()
           .filter((rule) => !removed.has(rule.equipmentId))
           .map((rule) =>
@@ -7675,28 +7695,20 @@
         if (!ids.length && selected && diagram.items[selected])
           ids.push(selected);
         if (!ids.length) return;
-        copied = ids.map((id) => structuredClone(diagram.items[id]));
+        copied = ids.map((id) => ({ id, item: structuredClone(diagram.items[id]) }));
         $("#status").textContent = copied.length + " objeto(s) copiado(s)";
       }
       function pasteObject() {
         if (!copied.length) return;
         pushHistory();
         const pasted = [];
+        const pastedIds = new Map(copied.map(entry => [entry.id, newId()]));
         for (const original of copied) {
-          const o = structuredClone(original),
-            k = newId();
+          const o = remapInstrumentLinks(structuredClone(original.item), id => pastedIds.get(id)),
+            k = pastedIds.get(original.id);
           delete o.topology;
           delete o.conductorGroupId;
-          if (
-            o.type === "breaker" ||
-            o.type === "transformer" ||
-            o.type === "turbogenerator" ||
-            o.type === "disconnector" ||
-            o.type === "load" ||
-            o.type === "utility" ||
-            o.type === "text" ||
-            o.type === "capacitor"
-          ) {
+          if (o.x != null && o.y != null) {
             o.x += 40;
             o.y += 40;
           } else {
@@ -7890,6 +7902,7 @@
         if (
           o.type === "bus" ||
           o.type === "line" ||
+          o.type === "cable" ||
           o.type === "annotationLine" ||
           o.type === "area"
         ) {
@@ -7908,16 +7921,7 @@
             o.x2 = snap(cx + dx * factor);
             o.y2 = snap(cy + dy * factor);
           }
-        } else if (
-          o.type === "transformer" ||
-          o.type === "breaker" ||
-          o.type === "turbogenerator" ||
-          o.type === "disconnector" ||
-          o.type === "load" ||
-          o.type === "utility" ||
-          o.type === "capacitor" ||
-          o.type === "text"
-        ) {
+        } else if (o.x != null && o.y != null) {
           if (turn) o.rotation = ((o.rotation || 0) + 90) % 360;
           else o.scale = Math.max(0.5, Math.min(2.5, (o.scale || 1) * factor));
         }
@@ -7974,7 +7978,7 @@
             o.type === "turbogenerator" ||
             o.type === "utility" ||
             o.type === "disconnector" ||
-            o.type === "load")
+            ["load", "motor"].includes(o.type))
         )
           registerCommand();
         const attemptRules = o ? commandAttemptRules(equipmentId) : [],

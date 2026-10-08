@@ -1,8 +1,9 @@
-import { PROTECTION_CURVES } from "./electrical-studies.js?v=47";
+import { PROTECTION_CURVES } from "./electrical-studies.js?v=48";
 import { DEFAULT_COORDINATION_CASE, COORDINATION_STATUS, coordinationDevice, coordinationExample,
   normalizeCoordinationCase, analyzeCoordination, loadCoordinationCases, saveCoordinationCases,
-  coordinationReportCSV, coordinationReportText } from "./protection-coordination.js?v=47";
-import { coordinationChart, PROTECTION_COLORS } from "./protection-chart.js?v=47";
+  coordinationReportCSV, coordinationReportText } from "./protection-coordination.js?v=48";
+import { coordinationChart, PROTECTION_COLORS } from "./protection-chart.js?v=48";
+import { relayCoordinationProfile } from "./equipment-library.js?v=48";
 
 export function attachProtectionWorkbench({ dialog, getDiagram, getScope, onOpen }) {
   const host = dialog.querySelector("#protectionWorkbench"), $ = id => dialog.querySelector("#" + id);
@@ -31,7 +32,7 @@ export function attachProtectionWorkbench({ dialog, getDiagram, getScope, onOpen
         <div class="case-buttons"><button id="pcCopyJSON" type="button">Copiar JSON</button><button id="pcDownloadJSON" type="button">Baixar JSON</button><button id="pcApplyJSON" type="button">Importar texto</button><button id="pcImportFile" type="button">Escolher arquivo JSON</button></div></div></section>
     <section id="pcDevices" class="case-panel" role="tabpanel" aria-labelledby="pcTabDevices" hidden>
       <div class="pc-device-heading"><div><h3>Caminho declarado da falta</h3><p>Jusante → montante · até 8 proteções de fase</p></div><div class="case-buttons"><button id="pcAddDevice" type="button">Adicionar proteção</button></div></div>
-      <p class="study-note">Selecione um disjuntor para copiar os ajustes cadastrados, ou configure uma proteção manual. Depois de copiados, os ajustes ficam no caso e podem ser editados. Tensão local e relação do TC referem as correntes a uma base comum.</p>
+      <p class="study-note">Selecione um relé com TC e disjuntor vinculados ou um disjuntor para copiar os ajustes de fase, ou configure uma proteção manual. Depois de copiados, os ajustes ficam no caso e podem ser editados. Tensão local e relação do TC referem as correntes a uma base comum.</p>
       <div id="pcDeviceList"></div><p id="pcEmptyDevices" class="pc-empty">Adicione as proteções do caminho ou carregue o exemplo didático.</p></section>
     <section id="pcResults" class="case-panel" role="tabpanel" aria-labelledby="pcTabResults" hidden>
       <div class="case-report-heading"><h3 id="pcResultTitle"></h3><p id="pcResultDate"></p></div><div class="case-stats" id="pcStats"></div>
@@ -106,7 +107,7 @@ export function attachProtectionWorkbench({ dialog, getDiagram, getScope, onOpen
         <p class="study-note">O multiplicador aplica t = k × [A / (M^p − 1) + B]; o dial de um fabricante pode usar outra escala. As tolerâncias são hipóteses de tempo do caso, sem banda de pickup ou saturação do TC.</p>`;
       card.querySelector("legend").textContent = (i + 1) + " · " + (i === 0 ? "Jusante" : i === config.devices.length - 1 ? "Montante" : "Intermediária");
       const equipment = card.querySelector('[data-field="equipmentId"]'); equipment.add(new Option("Manual · ajustes deste caso", ""));
-      for (const [id, o] of Object.entries(getDiagram().items || {})) if (o.type === "breaker" && Object.hasOwn(PROTECTION_CURVES, o.electrical?.protectionCurve)) equipment.add(new Option(o.name || id, id));
+      for (const [id, o] of Object.entries(getDiagram().items || {})) if (["breaker", "relay"].includes(o.type) && Object.hasOwn(PROTECTION_CURVES, o.electrical?.protectionCurve)) equipment.add(new Option((o.name || id) + (o.type === "relay" ? " · relé" : " · disjuntor"), id));
       if (d.equipmentId && ![...equipment.options].some(o => o.value === d.equipmentId)) equipment.add(new Option("Equipamento salvo ausente ou sem curva · conferir", d.equipmentId));
       const curve = card.querySelector('[data-field="protectionCurve"]'); for (const [id, c] of Object.entries(PROTECTION_CURVES)) curve.add(new Option(c.name, id));
       for (const input of card.querySelectorAll("[data-field]")) { input.id = `pcDevice-${i}-${input.dataset.field}`; input.value = d[input.dataset.field]; }
@@ -122,14 +123,16 @@ export function attachProtectionWorkbench({ dialog, getDiagram, getScope, onOpen
       }
       equipment.onchange = () => {
         const o = getDiagram().items?.[equipment.value];
-        if (o?.type === "breaker" && Object.hasOwn(PROTECTION_CURVES, o.electrical?.protectionCurve)) {
-          const data = o.electrical;
-          for (const key of ["protectionCurve", "pickupA", "timeMultiplier", "definiteTime", "instantaneousA", "instantaneousTime", "breakerTime"])
+        if (["breaker", "relay"].includes(o?.type) && Object.hasOwn(PROTECTION_CURVES, o.electrical?.protectionCurve)) {
+          let data;
+          try { data = relayCoordinationProfile(o, getDiagram().items); }
+          catch (error) { equipment.value = ""; message(error.message); return; }
+          for (const key of ["protectionCurve", "pickupA", "timeMultiplier", "definiteTime", "instantaneousA", "instantaneousTime", "breakerTime", "ctPrimary", "ctSecondary"])
             if (data[key] != null) card.querySelector(`[data-field="${key}"]`).value = data[key];
           card.querySelector('[data-field="name"]').value = o.name || equipment.value;
           card.querySelector('[data-field="deviceKV"]').value = data.nominalKV ?? "";
-          card.querySelector('[data-field="inputBasis"]').value = "primary";
-          message(data.nominalKV > 0 ? "Ajustes primários copiados para o caso. Confirme o TC e as tolerâncias de tempo." : "Ajustes copiados. Informe a tensão local que não consta no cadastro.");
+          card.querySelector('[data-field="inputBasis"]').value = data.inputBasis || "primary";
+          message(data.nominalKV > 0 ? "Ajustes de fase copiados para o caso. Confirme os vínculos, a relação do TC e as tolerâncias." : "Ajustes copiados. Informe a tensão local que não consta no cadastro.");
         }
         deviceUI(card);
       };

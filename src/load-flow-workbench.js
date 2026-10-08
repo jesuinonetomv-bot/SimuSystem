@@ -1,6 +1,6 @@
 import { DEFAULT_CASE, normalizeStudyCase, runStudyCase, loadStudyCases, saveStudyCases,
-  studyReportCSV, studyReportText } from "./study-cases.js?v=47";
-import { exampleStudyDiagram } from "./study-example.js?v=47";
+  studyReportCSV, studyReportText } from "./study-cases.js?v=48";
+import { exampleStudyDiagram } from "./study-example.js?v=48";
 
 export function attachLoadFlowWorkbench({ dialog, getDiagram, getScope, networkOptions, setOverlay, onOpen }) {
   const $ = id => dialog.querySelector("#" + id), format = (v, digits = 3) => Number.isFinite(v) ?
@@ -98,10 +98,10 @@ export function attachLoadFlowWorkbench({ dialog, getDiagram, getScope, networkO
   function equipmentFields(model) {
     $("lfLoadRows").replaceChildren(); $("lfGeneratorRows").replaceChildren();
     for (const [id, o] of Object.entries(model.items || {})) {
-      if (!["load", "turbogenerator"].includes(o.type)) continue;
+      if (!["load", "motor", "turbogenerator"].includes(o.type)) continue;
       const row = document.createElement("tr"), data = networkOptions.electricalData(o); row.dataset.equipmentId = id;
-      cell(row, o.name || (o.type === "load" ? "Carga" : "Gerador")); cell(row, ["active", "running"].includes(o.state) ? "Em operação" : "Desligado");
-      if (o.type === "load") {
+      cell(row, o.name || (["load", "motor"].includes(o.type) ? "Carga" : "Gerador")); cell(row, ["active", "running"].includes(o.state) ? "Em operação" : "Desligado");
+      if (["load", "motor"].includes(o.type)) {
         const values = config.loads[id] || {}; cell(row, format(+data.activePowerMW * (o.runtimeScale ?? 1)));
         input(row, values.percent ?? 100, (o.name || "Carga") + " · fator (%)", "percent", 0, 1000);
         input(row, values.powerFactor ?? data.powerFactor, (o.name || "Carga") + " · fator de potência", "powerFactor", .01, 1);

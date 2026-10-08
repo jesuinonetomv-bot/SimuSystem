@@ -94,7 +94,7 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
       if (o.type === "utility" && !finite(data.forcedCurrentA) ||
           o.type !== "utility" && o.type !== "turbogenerator")
         references.set(id, number(data.gridRatedMVA) || 1);
-    } else if (o.type === "load" && o.state === "active" ||
+    } else if (["load", "motor"].includes(o.type) && o.state === "active" ||
                o.type === "capacitor" && (o.activeStages ?? (o.state === "active" ? 1 : 0)) > 0) {
       value.p -= number(result.activeMW); value.q -= number(result.reactiveMvar);
     }
@@ -173,7 +173,7 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
       if (!flow) { if (e.ideal) ambiguousItems.add(e.id); continue; }
       if (Math.max(Math.abs(flow.p), Math.abs(flow.q)) < FLOW_EPSILON) continue;
       if (!measurements.get(e.id)?.energized) continue;
-      if (!["line", "bus", "transformer", "breaker", "disconnector"].includes(items[e.id].type)) continue;
+      if (!["line", "bus", "cable", "transformer", "breaker", "disconnector", "fuse"].includes(items[e.id].type)) continue;
       segments.push({ key: e.key, itemId: e.id, from: { ...e.from }, to: { ...e.to },
         activeMW: flow.p, reactiveMvar: flow.q });
     }

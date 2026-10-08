@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SimuSystem v48 · Componentes</title><link rel="stylesheet" href="../src/workbench.css?v=48">
+<style>
+body { margin: 0; background: #eef3f9; color: #203449; font: 14px system-ui; }
+main { max-width: 1040px; margin: 25px auto; padding: 0 24px; }
+.preview-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+h1 { font-size: 27px; margin: 7px 0; } .eyebrow { color: #32628e; font-size: 12px; letter-spacing: 1px; }
+.intro { color: #60788f; line-height: 1.5; margin: 7px 0 20px; }
+.catalog { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+.equipment-card { display: flex; text-align: left; gap: 14px; align-items: center; border: 1px solid #d0dce9; border-radius: 8px; padding: 18px 12px; background: #fbfcfd; cursor: pointer; color: #203449; }
+.equipment-card:hover, .equipment-card:focus-visible { border-color: #2562aa; background: #f7fbff; }
+.equipment-card svg { width: 70px; height: 88px; flex-shrink: 0; } .equipment-card strong { display: block; font-size: 17px; }
+.equipment-card small { display: block; margin-top: 7px; color: #698196; font-size: 12px; line-height: 1.5; }
+.proof { margin-top: 20px; padding: 17px 20px; border: 1px solid #c9dce8; background: #e5f0f8; border-radius: 8px; }
+.proof p { margin: 7px 0; line-height: 1.5; }.sel { display: none; }
+a { color: #245b9c; }.local-note { color: #6b8195; font-size: 12px; }
+@media(max-width:600px) { main { margin: 18px auto; padding: 0 14px; }.catalog { grid-template-columns: 1fr; }.equipment-card { padding: 12px; } h1 { font-size: 23px; }.preview-head { display: block; } }
+</style></head><body><main>
+<div class="preview-head"><div><div class="eyebrow">SIMUSYSTEM · MODELAGEM · v48</div><h1>Componentes do unifilar</h1></div><a href="../">Abrir SimuSystem</a></div>
+<p class="intro">Relé, TC, TP, TC toroidal e cabo com cadastro próprio. Toque em um componente para conferir seus dados e vínculos.</p>
+<div class="catalog technical" id="catalog"></div>
+<div class="proof"><strong>Integração dos dados aos estudos</strong><p id="cableSummary"></p><p id="flowSummary"></p><p id="relaySummary"></p></div>
+<p class="local-note">Página de verificação da interface. Alterações aqui são locais e não modificam diagramas publicados. As limitações de cada componente aparecem no cadastro.</p>
+</main><script type="module">
+import { EQUIPMENT_CATALOG, createEquipment, cableEquivalent, relayCoordinationProfile } from "../src/equipment-library.js?v=48";
+import { attachComponentEditor } from "../src/component-editor.js?v=48";
+import { renderTechnicalSymbol } from "../src/technical-symbols.js?v=48";
+import { solveDiagramPowerFlow } from "../src/power-flow.js?v=48";
+const NS = "http://www.w3.org/2000/svg", E = (tag, attrs = {}, value) => { const el = document.createElementNS(NS, tag); for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v); if (value != null) el.textContent = value; return el; };
+const diagram = { name: "Verificação de componentes", items: {} };
+for (const type of Object.keys(EQUIPMENT_CATALOG)) diagram.items[type] = createEquipment(type, { x: 35, y: 48 }, { x: 35, y: 83 });
+diagram.items.cable.x1 = 35; diagram.items.cable.y1 = 6;
+Object.assign(diagram.items.cable.electrical, { nominalKV: 13.8, lengthM: 250, resistanceOhmPerKm: .8, reactanceOhmPerKm: .16, parallelRuns: 2, ampacityPerRunA: 180, sectionMm2: 95 });
+diagram.items.cable.topology = { terminalA: "a", terminalB: "b" };
+diagram.items.a = { type: "bus", name: "BARRA DE ORIGEM", x1: 2000, x2: 2100, y1: 0, y2: 0, electrical: { nominalKV: 13.8 } };
+diagram.items.b = { type: "bus", name: "BARRA DO MOTOR", x1: 4000, x2: 4100, y1: 0, y2: 0, electrical: { nominalKV: 13.8 } };
+diagram.items.grid = { type: "utility", name: "REDE", x: -2000, y: -2000, state: "running", electrical: { nominalKV: 13.8 }, topology: { terminalA: "a" } };
+diagram.items.dj = { type: "breaker", name: "DJ-MOTOR", x: -3000, y: -3000, state: "closed", electrical: { breakerTime: .06 } };
+diagram.items.motor.topology = { terminalA: "b" };
+diagram.items.ct.instrument = { measuredId: "cable" }; diagram.items.vt.instrument = { measuredId: "b" }; diagram.items.cbct.instrument = { measuredId: "cable" };
+diagram.items.relay.instrument = { ctId: "ct", vtId: "vt", cbctId: "cbct", breakerId: "dj" }; diagram.items.relay.electrical.protectionCurve = "standard";
+for (const type of ["fuse", "motor"]) { diagram.items[type].x = 3000; diagram.items[type].y = 3000; }
+diagram.items.fuse.topology = { terminalA: "a", terminalB: "c" }; diagram.items.fuse.state = "open";
+diagram.items.c = { type: "bus", name: "RESERVA", x1: 6000, x2: 6100, y1: 0, y2: 0, electrical: { nominalKV: 13.8 } };
+const editor = attachComponentEditor({ getDiagram: () => diagram, onSave: (id, next) => { diagram.items[id] = next; draw(); } });
+function draw() {
+  const host = document.querySelector("#catalog"); host.replaceChildren();
+  for (const [type, info] of Object.entries(EQUIPMENT_CATALOG)) {
+    const button = document.createElement("button"); button.className = "equipment-card"; button.type = "button"; button.dataset.component = type;
+    const svg = E("svg", { viewBox: "0 0 70 96", "aria-hidden": "true" }), g = E("g");
+    const o = diagram.items[type]; renderTechnicalSymbol(g, type === "cable" ? o : { ...o, x: 35, y: 48 }, E); svg.append(g);
+    const title = document.createElement("strong"); title.textContent = info.name;
+    const detail = document.createElement("small"); detail.textContent = type === "cable" ? "Comprimento · R/X · corrente admissível" : type === "relay" ? "Ajustes de fase · TC · TP · disjuntor" : info.kind === "instrument" ? "Cadastro · vínculo por equipamento" : "Dados elétricos · estado no modelo";
+    const label = document.createElement("span"); label.append(title, detail); button.append(svg,label); button.onclick = () => editor.open(type); host.append(button);
+  }
+  const z = cableEquivalent(diagram.items.cable.electrical);
+  document.querySelector("#cableSummary").textContent = z.known ? `Cabo: R = ${z.resistanceOhm.toLocaleString("pt-BR")} Ω · X = ${z.reactanceOhm.toLocaleString("pt-BR")} Ω · corrente admissível = ${z.ampacityA ?? "não cadastrada"} A.` : "Cabo: cálculos pendentes de R/X.";
+  try { const result = solveDiagramPowerFlow(diagram); document.querySelector("#flowSummary").textContent = `Motor de ${diagram.items.motor.electrical.activePowerMW} MW alimentado pelo cabo · fluxo ${result.converged ? "convergente" : "sem convergência"} · perdas = ${(result.totalLossMW * 1000).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kW.`; } catch (error) { document.querySelector("#flowSummary").textContent = error.message; }
+  try { const p = relayCoordinationProfile(diagram.items.relay, diagram.items); document.querySelector("#relaySummary").textContent = `Relé vinculado ao TC ${p.ctPrimary}/${p.ctSecondary} A e ao DJ-MOTOR · tempo do disjuntor ${p.breakerTime.toLocaleString("pt-BR")} s.`; } catch (error) { document.querySelector("#relaySummary").textContent = error.message; }
+}
+draw();
+</script></body></html>

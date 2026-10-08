@@ -28,7 +28,7 @@ test("new worker precaches fresh HTML and versioned assets rather than reusing H
   const w = worker(); await w.install(); assert.ok(w.precached.length > 20);
   assert.ok(w.precached.every(r => r.cache === "reload"));
   assert.ok(w.precached.some(r => r.url === base + "index.html"));
-  assert.ok(w.precached.some(r => r.url.endsWith("protection-workbench.js?v=47")));
+  assert.ok(w.precached.some(r => r.url.endsWith("protection-workbench.js?v=48")));
 });
 test("navigation requests fresh HTML and updates the common root/index offline entry", async () => {
   const w = worker(); assert.equal(await (await w.navigate("./")).text(), "v47");

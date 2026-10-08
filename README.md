@@ -2,11 +2,53 @@
 
 Protótipo vetorial e responsivo do simulador de manobras do sistema elétrico.
 
+## Componentes do unifilar (v48)
+
+Em **Modelagem → Inserir**, estão disponíveis cabo, relé, TC, TP,
+TC toroidal, fusível, motor, para-raios e aterramento, além dos equipamentos
+anteriores. Selecione o componente e use **Dados elétricos** para editar.
+Cabos usam dois pontos; os demais símbolos podem ser movidos, girados,
+redimensionados, copiados e excluídos. O operador consulta os dados sem editá-los.
+
+| Componente | Participação nesta versão |
+| --- | --- |
+| Cabo | R/X do trecho no fluxo, curto trifásico, animação e análise de anel; ampacidade nos alertas de fluxo |
+| Motor | Potência elétrica absorvida e fator de potência no fluxo; estado ativo/inativo |
+| Fusível | Contato intacto/aberto na topologia; corrente e capacidade de interrupção cadastradas |
+| TC e TP | Relação ideal, classe, carga e vínculo ao equipamento medido; lado primário/secundário quando medem transformador |
+| Relé | Vínculos com TC, TP, toroidal e disjuntor; cópia dos ajustes de fase e da relação do TC para coordenação |
+| TC toroidal | Cadastro do sensor residual e vínculo ao trecho; sem inferir residual do fluxo equilibrado |
+| Para-raios e aterramento | Símbolos, cadastro e vínculo ao ponto protegido; sem unir nós de potência |
+
+No cabo, `R = R_por_km × comprimento_m / 1000 / circuitos_paralelos`,
+com a mesma expressão para X. Os circuitos são idênticos e não há acoplamento
+mútuo. A corrente admissível total é a soma dos valores cadastrados para cada
+circuito idêntico. Seção, material e isolação são cadastro: o programa não
+deduz impedância nem ampacidade desses campos. R/X ausentes impedem o cálculo;
+zero explícito configura um trecho ideal. O desenho não define o comprimento
+elétrico. No caso mínimo IEC, permanece a aproximação existente de correção
+resistiva com coeficiente 0,004/°C em relação a 20 °C, sem cálculo térmico do cabo.
+
+Vínculos de instrumentos ficam separados de conexões de potência. Linhas
+tracejadas aparecem na modelagem ao selecionar o instrumento. A cópia de um
+conjunto conserva apenas vínculos cujos alvos também foram copiados; a exclusão
+limpa referências ao alvo removido. Um cabo só aceita conexão em suas extremidades.
+
+Saturação de TC, faltas à terra, partida e contribuição de motor ao curto,
+curvas de fusíveis, surtos e disparo automático dos novos componentes não são
+calculados. Estas limitações aparecem em cada cadastro. A leitura de TC/TP é
+uma estimativa do modelo operacional. Corrente de barra ou contato sem solução
+passante não aparece como um zero calculado. Dois relés que atuam no mesmo
+disjuntor não podem ser tratados como dispositivos em série na coordenação.
+
+Verificação visual isolada: `tests/component-preview.html` e
+`tests/component-responsive-preview.html`, sem alterar os diagramas publicados.
+
 ## Coordenação de proteção de fase (v47)
 
 Em **Estudos → Coordenação de proteção**, crie casos com até oito proteções
 em um caminho declarado, ordenado de jusante para montante. Copie ajustes de
-disjuntores com curva cadastrada ou configure dispositivos manuais. O exemplo
+relés vinculados a TC/disjuntor ou de disjuntores com curva cadastrada ou configure dispositivos manuais. O exemplo
 de três proteções é independente e usa valores didáticos próprios. Os casos
 são salvos por modelo neste aparelho; JSON permite transferir os parâmetros.
 CSV, relatório copiado e impressão incluem o caso, critérios, resultados e

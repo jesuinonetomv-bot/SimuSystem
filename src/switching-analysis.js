@@ -1,9 +1,11 @@
 // Terminal graph for switching studies. The commanded switch is removed
 // before looking for an alternate electrical path; transformers keep two ports.
+import { cableEquivalent, equipmentDefaults } from "./equipment-library.js?v=48";
 const SWITCHES = new Set(["breaker", "disconnector"]);
+const CONTACTS = new Set(["breaker", "disconnector", "fuse"]);
 const CONDUCTORS = new Set(["line", "bus"]);
 const TYPES = new Set(["line", "bus", "breaker", "disconnector", "transformer",
-  "utility", "turbogenerator", "load", "capacitor"]);
+  "utility", "turbogenerator", "load", "capacitor", "motor", "cable", "fuse"]);
 const EPS = 1e-9;
 const finite = (v) => v !== null && v !== "" && Number.isFinite(Number(v));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -17,11 +19,11 @@ function defaultTerminals(o) {
   const z = o.scale || 1, r = (o.rotation || 0) * Math.PI / 180;
   const rot = (x, y) => ({ x: o.x + x * Math.cos(r) - y * Math.sin(r),
     y: o.y + x * Math.sin(r) + y * Math.cos(r) });
-  if (SWITCHES.has(o.type)) return [rot(0, -22 * z), rot(0, 22 * z)];
+  if (CONTACTS.has(o.type)) return [rot(0, -22 * z), rot(0, 22 * z)];
   if (o.type === "transformer") return [rot(0, -44 * z), rot(0, 44 * z)];
   if (o.type === "turbogenerator") return [rot(18 * z, -40 * z)];
   if (o.type === "utility") return [rot(0, -52 * z)];
-  if (o.type === "load" || o.type === "capacitor") return [rot(0, -34 * z)];
+  if (["load", "capacitor", "motor"].includes(o.type)) return [rot(0, -34 * z)];
   return [{ x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }];
 }
 function defaultElectrical(o) {
@@ -32,6 +34,11 @@ function configured(o) {
   return !!(o.topology?.terminalA || o.topology?.terminalB);
 }
 function impedance(o, data, fraction = 1) {
+  if (o.type === "cable") {
+    const z = cableEquivalent({ ...equipmentDefaults("cable"), ...o.electrical });
+    return { ...z, hasImpedance: z.known && Math.hypot(z.resistanceOhm, z.reactanceOhm) > EPS,
+      kind: "cable", modelDefault: false };
+  }
   if (o.type === "transformer") {
     const known = finite(data.impedancePercent) && Number(data.impedancePercent) >= 0;
     const percent = known ? Number(data.impedancePercent) : null;
@@ -163,7 +170,7 @@ export function createSwitchingStudy(diagram, options = {}) {
     const cp = ports.get(id), a = points.get(cp[0]), b = points.get(cp[1]);
     const cuts = [];
     for (const [deviceId, o] of entries) {
-      if ((!SWITCHES.has(o.type) && o.type !== "transformer") ||
+      if ((!CONTACTS.has(o.type) && o.type !== "transformer") ||
           configured(o) || !ports.has(deviceId)) continue;
       const dp = ports.get(deviceId);
       const p = points.get(dp[0]), q = points.get(dp[1]);
@@ -192,12 +199,12 @@ export function createSwitchingStudy(diagram, options = {}) {
   for (const [id, o] of entries) {
     const ps = ports.get(id);
     if (!ps || ps.length !== 2) continue;
-    if (o.type === "transformer" || SWITCHES.has(o.type))
+    if (["transformer", "cable"].includes(o.type) || CONTACTS.has(o.type))
       edge(ps[0], ps[1], id, impedance(o, electricalData(o)));
   }
   const conducts = (e, states = {}, excluded = null) =>
     (excluded === null || e.id !== excluded) &&
-    (!SWITCHES.has(items[e.id]?.type) ||
+    (!CONTACTS.has(items[e.id]?.type) ||
       (states[e.id] ?? items[e.id].state) === "closed");
   function walk(seed, states = {}, accepts = () => true, excluded = null) {
     const seeds = Array.isArray(seed) ? seed : [seed];
@@ -220,7 +227,7 @@ export function createSwitchingStudy(diagram, options = {}) {
   const energizedItems = (states = {}) => {
     const live = livePorts(states);
     return new Set(entries.filter(([id, o]) => ports.has(id) &&
-      (!SWITCHES.has(o.type) || (states[id] ?? o.state) === "closed") &&
+      (!CONTACTS.has(o.type) || (states[id] ?? o.state) === "closed") &&
       ports.get(id).some((key) => live.has(key))).map(([id]) => id));
   };
   const sourcesFor = (seen) => sourceEntries.filter(([id]) =>
@@ -384,7 +391,7 @@ export function createSwitchingStudy(diagram, options = {}) {
         reverseTransformers: [], nextState };
     const before = livePorts(states), afterStates = { ...states, [switchId]: nextState },
       after = livePorts(afterStates), affected = walk(ports.get(switchId), states);
-    const lostLoads = entries.filter(([id, o]) => o.type === "load" &&
+    const lostLoads = entries.filter(([id, o]) => ["load", "motor"].includes(o.type) &&
       o.state === "active" && ports.has(id) && before.has(ports.get(id)[0]) &&
       !after.has(ports.get(id)[0])).map(([id, o]) => ({ id, name: o.name || "Carga" }));
     const reverse = reverseTransformers(states, afterStates, affected);

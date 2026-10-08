@@ -45,7 +45,7 @@ export class TimeSeriesEngine{
   }
   apply(diagram){
     for(const o of Object.values(diagram?.items||{})){
-      if(!["load","turbogenerator","capacitor"].includes(o.type)){delete o.runtimeScale;continue}
+      if(!["load","motor","turbogenerator","capacitor"].includes(o.type)){delete o.runtimeScale;continue}
       const e=o.electrical||{};
       o.runtimeScale=this.factor(e.timeProfile||"constant",e.profileAmplitude??100);
     }

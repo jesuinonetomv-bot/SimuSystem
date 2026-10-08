@@ -1,4 +1,5 @@
-import { PROTECTION_CURVES, protectionResponse } from "./electrical-studies.js?v=47";
+import { PROTECTION_CURVES, protectionResponse } from "./electrical-studies.js?v=48";
+import { relayCoordinationProfile } from "./equipment-library.js?v=48";
 
 // A declared series path is study data. These cases never issue switching commands.
 export const DEFAULT_COORDINATION_CASE = {
@@ -122,12 +123,18 @@ export function analyzeCoordination(input, diagram = { items: {} }) {
   const config = normalizeCoordinationCase(input);
   if (config.devices.length < 2) throw Error("Adicione pelo menos duas proteções, em ordem de jusante para montante.");
   const samples = coordinationSamples(config), pairs = [], warnings = [], missingBindings = [];
-  for (const d of config.devices) if (d.equipmentId && diagram.items?.[d.equipmentId]?.type !== "breaker")
+  for (const d of config.devices) if (d.equipmentId && !["breaker", "relay"].includes(diagram.items?.[d.equipmentId]?.type))
     missingBindings.push(d.name + ": equipamento salvo ausente neste modelo. Escolha um equipamento ou use o ajuste manual.");
   if (missingBindings.length) throw Error(missingBindings.join(" "));
+  const tripTargets = new Set();
   for (const d of config.devices) if (d.equipmentId) {
     const o = diagram.items[d.equipmentId];
-    if (o.state !== "closed") warnings.push(d.name + ": disjuntor não está fechado no estado atual. O caminho é uma hipótese do caso.");
+    if (o.type === "relay") relayCoordinationProfile(o, diagram.items);
+    const breakerId = o.type === "relay" ? o.instrument.breakerId : d.equipmentId;
+    if (tripTargets.has(breakerId)) throw Error("Duas proteções do caminho atuam no mesmo disjuntor. Use dispositivos em série distintos.");
+    tripTargets.add(breakerId);
+    if (diagram.items[breakerId].state !== "closed") warnings.push(d.name + ": disjuntor não está fechado no estado atual. O caminho é uma hipótese do caso.");
+    if (o.type === "relay") warnings.push(d.name + ": TC de fase ideal; funções de terra, TP e TC toroidal não avaliados na coordenação de fase.");
     warnings.push(d.name + ": ajustes copiados para o caso; confirme o cadastro antes do estudo.");
   }
   for (let i = 0; i < config.devices.length - 1; i++) {

@@ -1,5 +1,5 @@
-import { studyElectricalData } from "./study-network.js?v=47";
-import { solveDiagramPowerFlow } from "./power-flow.js?v=47";
+import { studyElectricalData } from "./study-network.js?v=48";
+import { solveDiagramPowerFlow } from "./power-flow.js?v=48";
 
 export const CASE_VERSION = 1;
 export const DEFAULT_CASE = {
@@ -62,7 +62,7 @@ export function prepareStudyCase(diagram, input, options = {}) {
   const data = options.electricalData || studyElectricalData, warnings = [], used = new Set();
   for (const [id, o] of Object.entries(model.items || {})) {
     const e = data(o), a = config.adjustments;
-    if (o.type === "load") {
+    if (["load", "motor"].includes(o.type)) {
       const row = config.loads[id] || {}, scale = a.loadPercent / 100 * (row.percent ?? 100) / 100;
       if (o.electrical?.activePowerMW == null) warnings.push((o.name || "Carga") + ": potência padrão utilizada.");
       o.electrical = { ...o.electrical, activePowerMW: +e.activePowerMW * scale,
@@ -80,6 +80,10 @@ export function prepareStudyCase(diagram, input, options = {}) {
     } else if (o.type === "line" && (o.electrical?.resistanceOhm != null || o.electrical?.reactanceOhm != null)) {
       o.electrical = { ...o.electrical, resistanceOhm: +(e.resistanceOhm ?? 0) * a.resistancePercent / 100,
         reactanceOhm: +(e.reactanceOhm ?? 0) * a.reactancePercent / 100 };
+    } else if (o.type === "cable") {
+      o.electrical = { ...o.electrical,
+        resistanceOhmPerKm: o.electrical?.resistanceOhmPerKm == null ? null : +o.electrical.resistanceOhmPerKm * a.resistancePercent / 100,
+        reactanceOhmPerKm: o.electrical?.reactanceOhmPerKm == null ? null : +o.electrical.reactanceOhmPerKm * a.reactancePercent / 100 };
     } else if (o.type === "transformer" && a.tapDeltaPercent) {
       o.electrical = { ...o.electrical, tapPercent: (+e.tapPercent || 0) + a.tapDeltaPercent };
     }
@@ -104,7 +108,7 @@ export function analyzeStudyAlerts(result, input) {
     let loading = null;
     if (br.type === "transformer" && +br.ratedMVA > 0)
       loading = Math.max(Math.hypot(br.pFromMW, br.qFromMvar), Math.hypot(br.pToMW, br.qToMvar)) / br.ratedMVA * 100;
-    if (br.type === "line" && +br.ampacityA > 0) loading = Math.max(br.currentA, br.currentToA) / br.ampacityA * 100;
+    if (["line", "cable"].includes(br.type) && +br.ampacityA > 0) loading = Math.max(br.currentA, br.currentToA) / br.ampacityA * 100;
     br.loadingPercent = loading;
     if (loading == null) { pending.push(br.name + ": limite nominal não cadastrado; sobrecarga não avaliada."); continue; }
     const severity = loading >= limits.loadingCritical ? "critical" : loading >= limits.loadingWarning ? "warning" : "normal";

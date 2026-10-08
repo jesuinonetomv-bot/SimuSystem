@@ -1,5 +1,5 @@
-import { buildStudyNetwork } from "./study-network.js?v=47";
-import { prepareFaultCase, analyzeFaultAlerts } from "./short-circuit-cases.js?v=47";
+import { buildStudyNetwork } from "./study-network.js?v=48";
+import { prepareFaultCase, analyzeFaultAlerts } from "./short-circuit-cases.js?v=48";
 
 const C = (re = 0, im = 0) => ({ re, im }), abs = z => Math.hypot(z.re, z.im);
 const add = (a, b) => C(a.re + b.re, a.im + b.im), sub = (a, b) => C(a.re - b.re, a.im - b.im);
@@ -186,8 +186,8 @@ export function runShortCircuitCase(diagram, input = {}, options = {}) {
     (c.standard === "iec" ? "c máximo/mínimo usa equações de referência IEC 60909-0:2016; K_T/K_G " + (c.corrections ? "aplicados" : "desativados neste caso") + "; o módulo não cobre integralmente as edições 2016 ou 2026. " :
       c.standard === "ansi" ? "Redes ANSI: TG com X″d em ½ ciclo e 1,5–4 ciclos; X′d em 30 ciclos; R do TG derivada de X″d/X/R e mantida entre períodos. X/R reduzido em redes separadas. " : "c = 1; impedâncias nominais, sem K_T/K_G. ") +
     "Pico, DC, RMS assimétrica e corrente térmica são estimativas do equivalente R-L com AC constante e pior ângulo de início; não incluem decaimento AC de geradores nem fatores ANSI MFi/NACD. " +
-    "Sem motores, inversores, unidades gerador-transformador K_S, faltas desequilibradas, aterramento ou corrente de interrupção normativa I_b. " +
-    "Cargas e capacitores são desprezados; R das linhas é referida a 20 °C e corrigida apenas no caso IEC mínimo. " +
+    "Sem contribuição de motores, inversores, unidades gerador-transformador K_S, faltas desequilibradas, aterramento ou corrente de interrupção normativa I_b. " +
+    "Cargas, motores e capacitores são desprezados; R das linhas/cabos é referida a 20 °C e corrigida apenas no caso IEC mínimo. " +
     "Capacidades das barras recebem comparação preliminar; a corrente em cada disjuntor de uma ligação ideal não é determinada e sua capacidade de interrupção não é certificada. As contribuições somam-se como fasores na tensão da barra de falta.";
   const result = { results, network, warnings: [...new Set(warnings)], studyCase: config, assumptions,
     diagramName: String(model.name || "Sistema atual"), completedAt: new Date().toISOString() };
