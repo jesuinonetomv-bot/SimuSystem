@@ -1,5 +1,5 @@
-import { buildStudyNetwork } from "./study-network.js?v=48";
-import { prepareFaultCase, analyzeFaultAlerts } from "./short-circuit-cases.js?v=48";
+import { buildStudyNetwork } from "./study-network.js?v=48.1";
+import { prepareFaultCase, analyzeFaultAlerts } from "./short-circuit-cases.js?v=48.1";
 
 const C = (re = 0, im = 0) => ({ re, im }), abs = z => Math.hypot(z.re, z.im);
 const add = (a, b) => C(a.re + b.re, a.im + b.im), sub = (a, b) => C(a.re - b.re, a.im - b.im);

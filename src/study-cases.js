@@ -1,5 +1,5 @@
-import { studyElectricalData } from "./study-network.js?v=48";
-import { solveDiagramPowerFlow } from "./power-flow.js?v=48";
+import { studyElectricalData } from "./study-network.js?v=48.1";
+import { solveDiagramPowerFlow } from "./power-flow.js?v=48.1";
 
 export const CASE_VERSION = 1;
 export const DEFAULT_CASE = {

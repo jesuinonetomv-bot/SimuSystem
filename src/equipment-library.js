@@ -12,6 +12,10 @@ export const EQUIPMENT_CATALOG = Object.freeze({
 });
 export const isCatalogEquipment = o => !!EQUIPMENT_CATALOG[o?.type];
 export const isInstrument = o => EQUIPMENT_CATALOG[o?.type]?.kind === "instrument";
+export function equipmentTypeLabel(type) {
+  return EQUIPMENT_CATALOG[type]?.name || { bus: "Barramento", line: "Conexão", breaker: "Disjuntor", disconnector: "Seccionadora",
+    transformer: "Transformador", utility: "Concessionária", turbogenerator: "Turbogerador", load: "Carga", capacitor: "Banco de capacitores" }[type] || "Equipamento";
+}
 const present = v => v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v));
 export function equipmentDefaults(type) {
   const base = { nominalKV: 13.8, frequencyHz: 60 };

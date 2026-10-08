@@ -1,4 +1,4 @@
-import { coordinationSamples, normalizeCoordinationCase, responseAt, primarySettings } from "./protection-coordination.js?v=48";
+import { coordinationSamples, normalizeCoordinationCase, responseAt, primarySettings } from "./protection-coordination.js?v=48.1";
 
 export const PROTECTION_COLORS = ["#2368b5", "#b9472c", "#287950", "#8654aa", "#a5740e", "#167d86", "#b23c75", "#586477"];
 const esc = text => String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

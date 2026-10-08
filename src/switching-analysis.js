@@ -1,6 +1,6 @@
 // Terminal graph for switching studies. The commanded switch is removed
 // before looking for an alternate electrical path; transformers keep two ports.
-import { cableEquivalent, equipmentDefaults } from "./equipment-library.js?v=48";
+import { cableEquivalent, equipmentDefaults } from "./equipment-library.js?v=48.1";
 const SWITCHES = new Set(["breaker", "disconnector"]);
 const CONTACTS = new Set(["breaker", "disconnector", "fuse"]);
 const CONDUCTORS = new Set(["line", "bus"]);

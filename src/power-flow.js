@@ -1,4 +1,4 @@
-import { buildStudyNetwork } from "./study-network.js?v=48";
+import { buildStudyNetwork } from "./study-network.js?v=48.1";
 const EPS=1e-10,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const C=(re=0,im=0)=>({re,im}),add=(a,b)=>C(a.re+b.re,a.im+b.im),sub=(a,b)=>C(a.re-b.re,a.im-b.im),mul=(a,b)=>C(a.re*b.re-a.im*b.im,a.re*b.im+a.im*b.re),conj=a=>C(a.re,-a.im),div=(a,b)=>{const d=b.re*b.re+b.im*b.im||EPS;return C((a.re*b.re+a.im*b.im)/d,(a.im*b.re-a.re*b.im)/d)},abs=a=>Math.hypot(a.re,a.im),polar=(r,a)=>C(r*Math.cos(a),r*Math.sin(a));
 const solveLinear=(A,b)=>{const n=b.length,M=A.map((r,i)=>[...r,b[i]]);for(let k=0;k<n;k++){let p=k;for(let i=k+1;i<n;i++)if(Math.abs(M[i][k])>Math.abs(M[p][k]))p=i;[M[k],M[p]]=[M[p],M[k]];if(Math.abs(M[k][k])<1e-12)throw Error("Matriz singular");for(let i=k+1;i<n;i++){const f=M[i][k]/M[k][k];for(let j=k;j<=n;j++)M[i][j]-=f*M[k][j]}}const x=Array(n);for(let i=n-1;i>=0;i--){let v=M[i][n];for(let j=i+1;j<n;j++)v-=M[i][j]*x[j];x[i]=v/M[i][i]}return x};

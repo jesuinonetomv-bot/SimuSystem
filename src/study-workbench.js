@@ -1,6 +1,6 @@
-import { attachProtectionWorkbench } from "./protection-workbench.js?v=48";
+import { attachProtectionWorkbench } from "./protection-workbench.js?v=48.1";
 
-import { attachShortCircuitWorkbench } from "./short-circuit-workbench.js?v=48";
+import { attachShortCircuitWorkbench } from "./short-circuit-workbench.js?v=48.1";
 
 export function attachStudyWorkbench({ getDiagram, getScope, networkOptions, openPowerFlow, setOverlay, onOpen, onClose }) {
   const $ = (id) => document.getElementById(id);

@@ -1,7 +1,7 @@
 // Balanced, positive-sequence training model. Connectivity comes from the
 // switching graph, so an open contact and a connector mean the same in all modes.
-import { createSwitchingStudy } from "./switching-analysis.js?v=48";
-import { equipmentDefaults, cableEquivalent } from "./equipment-library.js?v=48";
+import { createSwitchingStudy } from "./switching-analysis.js?v=48.1";
+import { equipmentDefaults, cableEquivalent } from "./equipment-library.js?v=48.1";
 
 const positive = (v) => v !== null && v !== "" && Number.isFinite(+v) && +v > 0;
 const finite = (v) => v !== null && v !== "" && Number.isFinite(+v);

@@ -1,5 +1,5 @@
-import { EQUIPMENT_CATALOG, equipmentDefaults, cableEquivalent, instrumentTargets, instrumentLinkIssues, isInstrument } from "./equipment-library.js?v=48";
-import { PROTECTION_CURVES, validateProtection } from "./electrical-studies.js?v=48";
+import { EQUIPMENT_CATALOG, equipmentDefaults, cableEquivalent, instrumentTargets, instrumentLinkIssues, isInstrument, equipmentTypeLabel } from "./equipment-library.js?v=48.1";
+import { PROTECTION_CURVES, validateProtection } from "./electrical-studies.js?v=48.1";
 
 // [key, label, kind, minimum, options]. Empty optional numbers stay null.
 const number = (key, label, min = 0) => [key, label, "number", min];
@@ -92,7 +92,7 @@ export function attachComponentEditor({ getDiagram, onSave, canEdit = () => true
     const instrument = isInstrument(o); dialog.querySelector("[data-links-title]").hidden = !instrument;
     if (instrument) for (const [key, types] of Object.entries(instrumentTargets(o.type))) {
       const options = { "": "Sem vínculo" };
-      for (const [targetId, target] of Object.entries(getDiagram().items || {})) if (targetId !== id && types.includes(target.type)) options[targetId] = (target.name || targetId) + " · " + (EQUIPMENT_CATALOG[target.type]?.name || target.type);
+      for (const [targetId, target] of Object.entries(getDiagram().items || {})) if (targetId !== id && types.includes(target.type)) options[targetId] = (target.name || "Sem TAG") + " · " + equipmentTypeLabel(target.type);
       if (o.instrument?.[key] && !options[o.instrument[key]]) options[o.instrument[key]] = "Vínculo removido · conferir";
       makeField([key, linkLabels[key], "select", null, options], o.instrument?.[key] || "", links);
     }
