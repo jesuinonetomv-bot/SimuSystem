@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5.3</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -2610,10 +2610,10 @@
       import { renderTechnicalSymbol, renderInstrumentLinks } from "./src/technical-symbols.js?v=49.3";
       import { attachStudyWorkbench } from "./src/study-workbench.js?v=49.2";
       import { attachSequenceFields } from "./src/sequence-fields.js?v=49.2";
-      import { createSwitchingStudy } from "./src/switching-analysis.js?v=49.2";
+      import { createSwitchingStudy, electricalTerminals } from "./src/switching-analysis.js?v=49.6";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
-      import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.5.3";
+      import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.6";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -3510,59 +3510,7 @@
       enableFaceplateDrag($("#cmd"));
       enableFaceplateDrag($("#busBox"));
       function terminals(o) {
-        if (["relay", "ct", "vt", "cbct", "surgeArrester", "ground"].includes(o.type)) return [];
-        if (o.type === "fuse") {
-          const z = (o.scale || 1) * 22, r = (o.rotation || 0) * Math.PI / 180;
-          return [{ x: o.x + Math.sin(r) * z, y: o.y - Math.cos(r) * z }, { x: o.x - Math.sin(r) * z, y: o.y + Math.cos(r) * z }];
-        }
-        if (o.type === "breaker" || o.type === "disconnector") {
-          const z = (o.scale || 1) * 22,
-            r = ((o.rotation || 0) * Math.PI) / 180,
-            dx = Math.sin(r) * z,
-            dy = Math.cos(r) * z;
-          return [
-            { x: o.x - dx, y: o.y - dy },
-            { x: o.x + dx, y: o.y + dy },
-          ];
-        }
-        if (o.type === "transformer") {
-          const z = (o.scale || 1) * 44,
-            r = ((o.rotation || 0) * Math.PI) / 180,
-            dx = Math.sin(r) * z,
-            dy = Math.cos(r) * z;
-          return [
-            { x: o.x - dx, y: o.y - dy },
-            { x: o.x + dx, y: o.y + dy },
-          ];
-        }
-        if (o.type === "turbogenerator" || o.type === "utility") {
-          const z = o.scale || 1,
-            r = ((o.rotation || 0) * Math.PI) / 180,
-            lx = o.type === "utility" ? 0 : 18 * z,
-            ly = (o.type === "utility" ? -52 : -40) * z;
-          return [
-            {
-              x: o.x + lx * Math.cos(r) - ly * Math.sin(r),
-              y: o.y + lx * Math.sin(r) + ly * Math.cos(r),
-            },
-          ];
-        }
-        if (["load", "motor"].includes(o.type) || o.type === "capacitor") {
-          const z = o.scale || 1,
-            r = ((o.rotation || 0) * Math.PI) / 180,
-            lx = 0,
-            ly = -34 * z;
-          return [
-            {
-              x: o.x + lx * Math.cos(r) - ly * Math.sin(r),
-              y: o.y + lx * Math.sin(r) + ly * Math.cos(r),
-            },
-          ];
-        }
-        return [
-          { x: o.x1, y: o.y1 },
-          { x: o.x2, y: o.y2 },
-        ];
+        return electricalTerminals(o);
       }
       function d2(a, b) {
         return Math.hypot(a.x - b.x, a.y - b.y);
@@ -6004,6 +5952,7 @@
           .filter((segment) => diagram.items[segment.itemId]);
         flowAnimator.update({
           segments: visibleSegments,
+          ambiguousSegments: (animatedFlow?.ambiguousSegments || []).filter(segment => diagram.items[segment.itemId]),
           enabled: flowAnimationEnabled,
           showActive: $("#flowShowActive").checked,
           showReactive: $("#flowShowReactive").checked,
@@ -6017,7 +5966,7 @@
         notice.textContent = invalid
           ? "Dados ou balanço de potência a verificar nesta tela."
           : ambiguous
-            ? "Sentido indefinido nos trechos em paralelo sem dados suficientes."
+            ? "Trechos tracejados: divisão e sentido em paralelo pendentes dos dados elétricos."
             : !simulationNetwork.sources.length ? "Sem fonte em serviço. Configure a alimentação e as cargas do modelo."
             : !visibleSegments.length ? "Sem transferência de potência nesta tela."
             : pendingImpedance ? "Fluxo nominal de treinamento; impedâncias pendentes." : "";

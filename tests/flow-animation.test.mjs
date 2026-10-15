@@ -121,11 +121,23 @@ test("an unknown parallel path suppresses only unresolved splits and opening its
   const r = calculate(d);
   assert.equal(forItem(r, "tie").length, 0); assert.equal(forItem(r, "tf").length, 0);
   assert.ok(r.ambiguousItems.has("tf")); assert.equal(r.invalidItems.size, 0);
+  assert.ok(r.ambiguousSegments.some(s => s.itemId === "tf"));
   assert.ok(forItem(r, "a").some(s => Math.abs(s.activeMW - 2) < 1e-6));
   assert.ok(forItem(r, "b").some(s => Math.abs(s.activeMW - 2) < 1e-6));
   d.items.tie.state = "open";
   const radialFlow = calculate(d); close(forItem(radialFlow, "tf")[0].activeMW, 2);
   assert.equal(radialFlow.ambiguousItems.size, 0);
+});
+test("an unresolved mesh does not erase a separate parallel group with known impedances", () => {
+  const d = radial(); d.items.tf = { type: "transformer", x: 600, y: 400,
+    electrical: { impedancePercent: null }, topology: binding("a", "b") };
+  d.items.c = bus(2500); d.items.load.topology = binding("c");
+  const line = (y, resistanceOhm) => ({ type: "line", x1: 1500, y1: y, x2: 2000, y2: y,
+    electrical: { nominalKV: 13.8, resistanceOhm, reactanceOhm: 0 }, topology: binding("b", "c") });
+  d.items.l1 = line(100, 1); d.items.l2 = line(400, 2);
+  const r = calculate(d);
+  close(forItem(r, "l1")[0].activeMW, 4 / 3); close(forItem(r, "l2")[0].activeMW, 2 / 3);
+  assert.ok(r.ambiguousItems.has("tf")); assert.equal(r.ambiguousItems.has("l1"), false);
 });
 test("invalid negative impedance remains blocked rather than being treated as pending", () => {
   const d = radial();
@@ -184,6 +196,7 @@ function animationHarness() {
   class Node {
     constructor(tag) { this.tag = tag; this.attributes = {}; this.children = []; this.parentNode = null; }
     setAttribute(name, value) { this.attributes[name] = String(value); }
+    getAttribute(name) { return this.attributes[name] ?? null; }
     append(node) { node.remove(); this.children.push(node); node.parentNode = this; }
     remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((n) => n !== this); this.parentNode = null; }
     replaceChildren() { for (const child of [...this.children]) child.remove(); }
@@ -225,5 +238,13 @@ test("P and Q filters remove their own channel and zero power has no arrows", ()
   assert.equal(h.arrows().length, 1); assert.equal(h.arrows()[0].attributes["data-quantity"], "q");
   h.update({ segments: [{ ...segment, activeMW: 0, reactiveMvar: 0 }] });
   assert.equal(h.arrows().length, 0); assert.equal(h.frames.size, 0);
+});
+test("unresolved parallel paths remain visible as stationary neutral marks and clear when disabled", () => {
+  const h = animationHarness();
+  h.update({ segments: [], ambiguousSegments: [segment] });
+  assert.equal(h.arrows().length, 1); assert.equal(h.arrows()[0].attributes.class, "flow-uncertain");
+  assert.equal(h.frames.size, 0);
+  h.update({ segments: [], ambiguousSegments: [segment] }); assert.equal(h.arrows().length, 1);
+  h.update({ enabled: false }); assert.equal(h.arrows().length, 0);
 });
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {bundledDiagram,withBundledDiagrams,restoreUnknownElectricalFields} from '../src/bundled-diagrams.js';
 import {SE56A01_ID} from '../src/se56a-01-diagram.js';
-import {createSwitchingStudy} from '../src/switching-analysis.js';
+import {createSwitchingStudy,electricalTerminals} from '../src/switching-analysis.js';
 import {buildStudyNetwork} from '../src/study-network.js';
 import {calculateThreePhaseFault} from '../src/electrical-studies.js';
 import {referenceReadouts,transformerNameplate,electricalFieldValue} from '../src/reference-diagrams.js';
@@ -16,7 +16,7 @@ function trainingResults(diagram) {
  const geometry=page.slice(page.indexOf('      function terminals('),page.indexOf('      function transformerSequenceViolation('));
  const engine=page.slice(page.indexOf('      const isElectrical ='),page.indexOf('      function measurementLines('));
  const projection=page.slice(page.indexOf('      function projectPoint('),page.indexOf('      function flowAnalysis('));
- const results=new Function('diagram',geometry+engine+projection+'\nreturn calculateElectricalState();')(diagram);
+ const results=new Function('diagram','electricalTerminals',geometry+engine+projection+'\nreturn calculateElectricalState();')(diagram,electricalTerminals);
  const study=createSwitchingStudy(diagram),live=study.energizedItems();
  for(const [id,r]of results)if(!live.has(id))Object.assign(r,{energized:false,activeMW:0,reactiveMvar:0,currentA:0,voltageKV:0});
  const network=study.network();
@@ -53,8 +53,8 @@ test('native branch balances respect crossings, cascaded transformers and open 6
 test('the photographed model animates both powers without a layout-specific engine and stops at open contacts',()=>{
  const d=bundledDiagram(SE56A01_ID),readings=trainingResults(d),study=createSwitchingStudy(d);
  const flow=calculateAnimatedFlow(study.network(),readings),item=id=>flow.segments.find(s=>s.itemId===id);
- assert.ok(flow.segments.length>100);assert.equal(flow.invalidItems.size,0);assert.equal(flow.ambiguousItems.size,0);
- assert.equal(item('abb-tf-a').activeMW,16.74);assert.equal(item('abb-tf-d').activeMW,60);
+ assert.ok(flow.segments.some(s=>s.itemId==='abb-barra-230'));assert.equal(flow.invalidItems.size,0);assert.equal(flow.ambiguousItems.size,0);
+ assert.ok(Math.abs(item('abb-tf-a').activeMW-16.74)<1e-9);assert.equal(item('abb-tf-d').activeMW,60);
  assert.equal(item('abb-dist-tf-01').activeMW,1.86);assert.ok(item('abb-dist-tf-01').reactiveMvar>.73);
  assert.equal(item('abb-dj-secondary-b'),undefined);assert.equal(item('abb-dj-52al'),undefined);
  delete d.reconstruction;
@@ -155,4 +155,26 @@ test('blank electrical inputs remain unknown while an explicit zero retains its 
  assert.equal(electricalFieldValue({tagName:'INPUT',value:'4.16'}),4.16);
  assert.equal(electricalFieldValue({tagName:'SELECT',value:'resistive'}),'resistive');
  assert.equal(transformerNameplate({electrical:{ratedMVA:null}}),'Potência nominal pendente');
+});
+
+test('physical bus flows start at the serving incomer and stop at the last connected load',()=>{
+ const d=bundledDiagram(SE56A01_ID),r=trainingResults(d);
+ for(const firstLine of [true,false]){
+  const states={'abb-dj-52al2':firstLine?'closed':'open','abb-dj-52al':firstLine?'open':'closed'};
+  const study=createSwitchingStudy(d,{terminals:electricalTerminals}),n=study.network(states);
+  const live=study.energizedItems(states),current=new Map([...r].map(([id,value])=>[id,{...value,energized:live.has(id)}]));
+  const flow=calculateAnimatedFlow(n,current),bus=flow.segments.filter(s=>s.itemId==='abb-barra-230');
+  const incomer=d.items[firstLine?'abb-incomer-2-2':'abb-incomer-1-2'].x;
+  const leftLoad=d.items['abb-tf-d'].x,rightLoad=d.items['abb-tf-c'].x;
+  assert.ok(bus.length>0);
+  for(const s of bus){
+   assert.ok(Math.min(s.from.x,s.to.x)>=leftLoad-1e-6,'no phantom supply from the left bus end');
+   assert.ok(Math.max(s.from.x,s.to.x)<=rightLoad+1e-6,'no flow beyond the last load');
+   const worldDirection=(s.to.x-s.from.x)*s.activeMW;
+   if(Math.max(s.from.x,s.to.x)<=incomer+1e-6)assert.ok(worldDirection<0,'flow travels left from the actual incomer');
+   if(Math.min(s.from.x,s.to.x)>=incomer-1e-6)assert.ok(worldDirection>0,'flow travels right from the actual incomer');
+  }
+  const incoming=flow.segments.find(s=>s.itemId===(firstLine?'abb-dj-52al2':'abb-dj-52al'));
+  assert.ok((incoming.to.x-incoming.from.x)*incoming.activeMW>0,'incoming breaker and adjacent wires agree');
+ }
 });

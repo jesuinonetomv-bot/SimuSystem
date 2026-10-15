@@ -86,5 +86,5 @@ test('application resolves the baseline in both viewing and engineering and cach
  assert.ok(index.includes('else diagram = bundledDiagram(currentDiagramId) ||'));
  const sw=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
  assert.ok(sw.includes('./src/bundled-diagrams.js?v=49.5.2'));
- assert.ok(sw.includes('simusystem-v49.5.3'));
+ assert.ok(sw.includes('simusystem-v49.6'));
 });

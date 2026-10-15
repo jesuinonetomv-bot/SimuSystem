@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { analyzeSwitching, createSwitchingStudy } from "../src/switching-analysis.js";
+import { analyzeSwitching, createSwitchingStudy, electricalTerminals } from "../src/switching-analysis.js";
 
 const bus = (x, y, name, source = false) => ({
   type: "bus", x1: x, y1: y, x2: x + 100, y2: y, name, isSource: source,
@@ -204,7 +204,7 @@ function extract(start, end) {
   return html.slice(a, b);
 }
 function appAdapter(initial, remoteStates = []) {
-  return new Function("initial", "remoteStates", "createSwitchingStudy",
+  return new Function("initial", "remoteStates", "createSwitchingStudy", "electricalTerminals",
     'let diagram=initial, operatorSession={}, eng=false, currentDiagramId="current";' +
     'const operatorDiagramStates=new Map(remoteStates);' +
     'const maintenance={};' +
@@ -216,7 +216,7 @@ function appAdapter(initial, remoteStates = []) {
     extract("      function globalConnectorCode(group) {", "      function addConductorGroupLabels(") +
     extract("      function switchingAnalysisFor(", "      function alarmCommand(") +
     'return {switchingAnalysisFor,switchingCommandFor,ringAlarmMessage,switchingControlValue,nodes};'
-  )(initial, remoteStates, createSwitchingStudy);
+  )(initial, remoteStates, createSwitchingStudy, electricalTerminals);
 }
 test("the real app adapter follows connector codes and prefixed topology across tabs", () => {
   const current = basic();
@@ -406,7 +406,7 @@ test("unknown topology never produces calculated opening candidates", () => {
 });
 
 function operationAdapter(initial, { remoteStates = [], rules = [], maint = {} } = {}) {
-  return new Function("initial", "remoteStates", "rules", "maint", "createSwitchingStudy",
+  return new Function("initial", "remoteStates", "rules", "maint", "createSwitchingStudy", "electricalTerminals",
     'let diagram=initial, operatorSession={errors:0}, eng=false, currentDiagramId="current";' +
     'let pending=null, suppressAlarmUntil=0, alarmTotal=0;' +
     'const sessionTimeout={check:()=>true};' +
@@ -430,7 +430,7 @@ function operationAdapter(initial, { remoteStates = [], rules = [], maint = {} }
     'return {execute(id,{open=true}={}){pending=id; $("#cmd").open=open; $("#cmdOk").onclick();},' +
       'select(id){pending=id; $("#cmd").showModal();}, confirm(){$("#cmdOk").onclick();},' +
       'diagram,nodes,calls,operatorSession,operatorDiagramStates};'
-  )(initial, remoteStates, rules, maint, createSwitchingStudy);
+  )(initial, remoteStates, rules, maint, createSwitchingStudy, electricalTerminals);
 }
 for (const state of ["open", "closed"])
 test(`the real command handler cannot toggle a ${state} breaker with a closed faceplate`, () => {
@@ -561,3 +561,4 @@ test("a remote secondary protection trip updates the other tab's operator state"
   assert.equal(d.items.s2.state, "closed");
   assert.equal(app.operatorSession.errors, 1);
 });
+

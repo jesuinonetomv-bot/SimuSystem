@@ -1,3 +1,4 @@
+import {electricalTerminals} from "../src/switching-analysis.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -126,7 +127,7 @@ test("CT and TP show ideal secondary values but toroidal residual is never infer
 });
 test("actual app terminals agree with the new fuse and motor symbols at 90 degrees", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8"), a = html.indexOf("      function terminals(o) {"), b = html.indexOf("      function d2(", a);
-  const terminals = new Function(html.slice(a, b) + ";return terminals;")();
+  const terminals = new Function("electricalTerminals", html.slice(a, b) + ";return terminals;")(electricalTerminals);
   const fuse = { ...createEquipment("fuse", { x: 100, y: 100 }), rotation: 90 };
   close(terminals(fuse)[0].x, 122); close(terminals(fuse)[1].x, 78);
   const motor = { ...createEquipment("motor", { x: 100, y: 100 }), rotation: 90 }; close(terminals(motor)[0].x, 134);
@@ -149,4 +150,17 @@ test("a TC at a contact with no pass-through solution does not display a false z
   const items = { dj: { type: "breaker" } }, r = new Map([["dj", { energized: true, currentA: 0 }]]);
   assert.match(instrumentReadout(ct, items, r)[0], /não determinada/);
   r.get("dj").energized = false; assert.match(instrumentReadout(ct, items, r)[0], /0 A/);
+});
+
+
+test('rotated breakers, disconnectors and transformers agree with their rendered SVG terminal order',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const a=html.indexOf('      function terminals(o) {'),b=html.indexOf('      function d2(',a);
+ const actual=new Function('electricalTerminals',html.slice(a,b)+';return terminals;')(electricalTerminals);
+ for(const type of ['breaker','disconnector','transformer'])for(const rotation of [90,270]){
+  const reach=type==='transformer'?44:22,o={type,x:100,y:200,rotation,scale:1};
+  const ports=actual(o),expected=rotation===90?reach:-reach;
+  close(ports[0].x,100+expected);close(ports[1].x,100-expected);
+  close(ports[0].y,200);close(ports[1].y,200);
+ }
 });

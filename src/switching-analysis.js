@@ -15,7 +15,8 @@ function project(p, a, b) {
     ((p.x - a.x) * dx + (p.y - a.y) * dy) / length2)) : 0;
   return { x: a.x + t * dx, y: a.y + t * dy, t };
 }
-function defaultTerminals(o) {
+export function electricalTerminals(o) {
+  if (["relay", "ct", "vt", "cbct", "surgeArrester", "ground"].includes(o.type)) return [];
   const z = o.scale || 1, r = (o.rotation || 0) * Math.PI / 180;
   const rot = (x, y) => ({ x: o.x + x * Math.cos(r) - y * Math.sin(r),
     y: o.y + x * Math.sin(r) + y * Math.cos(r) });
@@ -67,7 +68,7 @@ function impedance(o, data, fraction = 1) {
 }
 export function createSwitchingStudy(diagram, options = {}) {
   const items = diagram?.items || {};
-  const terminals = options.terminals || defaultTerminals;
+  const terminals = options.terminals || electricalTerminals;
   const electricalData = options.electricalData || defaultElectrical;
   const tolerance = options.tolerance ?? 20;
   const entries = Object.entries(items).filter(([, o]) => o && TYPES.has(o.type));
@@ -167,6 +168,31 @@ export function createSwitchingStudy(diagram, options = {}) {
             edge(ak, bk, null);
     }
   }
+  // An ideal lead explicitly attached to, and drawn on top of, one bus is
+  // already part of that bus. Join at both physical endpoints and use the bus
+  // segments for flow display, rather than routing every branch via bus port 0.
+  const busOverlays = new Set();
+  for (const [id, o] of entries) {
+    if (o.type !== "line" || !configured(o) || !ports.has(id)) continue;
+    const z = impedance(o, electricalData(o));
+    if (!z.known || z.hasImpedance) continue;
+    const ps = ports.get(id), ends = ps.map(key => points.get(key));
+    for (const targetId of [o.topology.terminalA, o.topology.terminalB]) {
+      const bus = items[targetId], bp = ports.get(targetId);
+      if (bus?.type !== "bus" || !bp) continue;
+      const a = points.get(bp[0]), b = points.get(bp[1]);
+      if (distance(a, b) < EPS || !ends.every(p => distance(p, project(p, a, b)) < EPS)) continue;
+      const inlineDevice = entries.some(([deviceId, device]) => {
+        if ((!CONTACTS.has(device.type) && device.type !== "transformer") || configured(device)) return false;
+        const dp = ports.get(deviceId); if (!dp || dp.length !== 2) return false;
+        const p = points.get(dp[0]), q = points.get(dp[1]), pa = project(p, a, b), pb = project(q, a, b);
+        return distance(p, pa) <= tolerance && distance(q, pb) <= tolerance && Math.abs(pa.t - pb.t) > EPS;
+      });
+      if (inlineDevice) continue;
+      for (const key of ps) edge(key, conductorTap(targetId, points.get(key)), null);
+      busOverlays.add(id); break;
+    }
+  }
   // A conductor drawn behind a switch/transformer must not bypass its ports.
   // A study-only tap locates a fault without changing the saved drawing.
   const faultPoint = options.studyFaultPoint;
@@ -182,6 +208,7 @@ export function createSwitchingStudy(diagram, options = {}) {
     } else faultKey = ps[o.type === "cable" && faultPoint.fraction === 1 ? 1 : faultPoint.port || 0];
   }
   for (const [id, list] of taps) {
+    if (busOverlays.has(id)) continue;
     const cp = ports.get(id), a = points.get(cp[0]), b = points.get(cp[1]);
     const cuts = [];
     for (const [deviceId, o] of entries) {
@@ -453,3 +480,4 @@ export function createSwitchingStudy(diagram, options = {}) {
 export function analyzeSwitching(diagram, switchId, options = {}) {
   return createSwitchingStudy(diagram, options).analyze(switchId);
 }
+
