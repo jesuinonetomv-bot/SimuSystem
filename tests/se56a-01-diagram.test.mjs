@@ -6,7 +6,7 @@ import {SE56A01_ID} from '../src/se56a-01-diagram.js';
 import {createSwitchingStudy} from '../src/switching-analysis.js';
 import {buildStudyNetwork} from '../src/study-network.js';
 import {calculateThreePhaseFault} from '../src/electrical-studies.js';
-import {referenceReadouts,transformerNameplate,electricalFieldValue} from '../src/reference-diagrams.js';
+import {referenceReadouts,transformerNameplate,electricalFieldValue,applyReferenceTransformerBalances} from '../src/reference-diagrams.js';
 
 // Exercise the actual training calculation used by the page, including its
 // topology and transformer allocation, without booting Firebase or the UI.
@@ -15,7 +15,10 @@ function trainingResults(diagram) {
  const geometry=page.slice(page.indexOf('      function terminals('),page.indexOf('      function transformerSequenceViolation('));
  const engine=page.slice(page.indexOf('      const isElectrical ='),page.indexOf('      function measurementLines('));
  const projection=page.slice(page.indexOf('      function projectPoint('),page.indexOf('      function flowAnalysis('));
- return new Function('diagram',geometry+engine+projection+'\nreturn calculateElectricalState();')(diagram);
+ const results=new Function('diagram',geometry+engine+projection+'\nreturn calculateElectricalState();')(diagram);
+ const study=createSwitchingStudy(diagram),live=study.energizedItems();
+ for(const [id,r]of results)if(!live.has(id))Object.assign(r,{energized:false,activeMW:0,reactiveMvar:0,currentA:0,voltageKV:0});
+ return applyReferenceTransformerBalances(diagram,results,study.network());
 }
 
 test('ideal training sources retain 230/13.8/4.16 kV and consistent load currents',()=>{
@@ -29,6 +32,20 @@ test('ideal training sources retain 230/13.8/4.16 kV and consistent load current
  assert.ok(Math.abs(small.currentA-277.5722448027047)<1e-6);
  for(const o of Object.values(d.items))if(o.isSource)delete o.electrical.idealVoltageBoundary;
  assert.ok(trainingResults(d).get('abb-source-lt-ii').voltageKV<230,'legacy source behavior remains available');
+});
+
+test('native branch balances respect crossings, cascaded transformers and open 6B/12B contacts',()=>{
+ const d=bundledDiagram(SE56A01_ID),r=trainingResults(d);
+ assert.ok(Math.abs(r.get('abb-tf-a').activeMW-16.74)<1e-9);
+ assert.ok(Math.abs(r.get('abb-tf-a').loadingPercent-18/70*100)<1e-9);
+ for(const suffix of ['b','c','d']){
+  const t=r.get('abb-tf-'+suffix);assert.equal(t.activeMW,60);assert.equal(t.reactiveMvar,0);
+  assert.ok(t.loadingPercent<100);assert.equal(t.connectedBothSides,true);
+ }
+ const network=createSwitchingStudy(d).network({'abb-dj-secondary-b':'closed'});
+ applyReferenceTransformerBalances(d,r,network);
+ assert.equal(r.get('abb-tf-a').powerIndeterminate,true);assert.equal(r.get('abb-tf-b').powerIndeterminate,true);
+ assert.equal(r.get('abb-tf-c').powerIndeterminate,false);
 });
 
 test('the photographed screen has 45 contacts, 13 transformers and explicit native connections',()=>{

@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5.1</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5.2</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -2598,8 +2598,8 @@
         remove,
         onValue,
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.5.1";
-      import { transformerNameplate, referenceReadouts, electricalFieldValue } from "./src/reference-diagrams.js?v=49.5";
+      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.5.2";
+      import { transformerNameplate, referenceReadouts, electricalFieldValue, applyReferenceTransformerBalances } from "./src/reference-diagrams.js?v=49.5.2";
       import { diagramDeletionUpdates, diagramRestorationUpdates } from "./src/diagram-lifecycle.js?v=49.4";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
@@ -4828,6 +4828,7 @@
       function measurementLines(k, o, filtered = false) {
         const r = electricalResults.get(k);
         if (!r) return [];
+        if (r.powerIndeterminate) return ["Fluxo indeterminado: caminhos em paralelo; cadastrar impedâncias e calcular o estudo."];
         const hide = (key) =>
             filtered &&
             o.hiddenMeasurements &&
@@ -5829,6 +5830,7 @@
               "frequencyHz", "currentA", "activeMW", "reactiveMvar", "loadingPercent",
               "overfluxPercent"]) result[field] = 0;
           }
+        applyReferenceTransformerBalances(diagram, electricalResults, study.network());
         const animatedFlow = flowAnimationEnabled
           ? calculateAnimatedFlow(study.network(), electricalResults, { electricalData })
           : null;
