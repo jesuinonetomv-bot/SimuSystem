@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5.1</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -2598,7 +2598,7 @@
         remove,
         onValue,
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.5";
+      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.5.1";
       import { transformerNameplate, referenceReadouts, electricalFieldValue } from "./src/reference-diagrams.js?v=49.5";
       import { diagramDeletionUpdates, diagramRestorationUpdates } from "./src/diagram-lifecycle.js?v=49.4";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
@@ -4312,7 +4312,12 @@
           const sourceCapacity = external.length
               ? Math.max(100, pLoad * 1.25, genCapacity)
               : Math.max(1, genCapacity),
-            islandS = Math.hypot(pLoad, qLoad);
+            islandS = Math.hypot(pLoad, qLoad),
+            // Explicit ideal boundaries hold the nominal training voltage.
+            // Do not infer a physical voltage drop from unspecified impedance.
+            idealBoundaryPU = otherExternal.length && otherExternal.every(
+              (o) => electricalData(o).idealVoltageBoundary === true,
+            ) ? +electricalData(otherExternal[0]).voltageSetpointPU || 1 : null;
           const transformerIds = new Set(
               ids.filter((k) => diagram.items[k].type === "transformer"),
             ),
@@ -4649,7 +4654,7 @@
               pu = energized
                 ? gridState
                   ? gridState.voltagePU
-                  : Math.max(
+                  : idealBoundaryPU ?? Math.max(
                       0.7,
                       Math.min(
                         1.2,

@@ -1,11 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {bundledDiagram,withBundledDiagrams,restoreUnknownElectricalFields} from '../src/bundled-diagrams.js';
 import {SE56A01_ID} from '../src/se56a-01-diagram.js';
 import {createSwitchingStudy} from '../src/switching-analysis.js';
 import {buildStudyNetwork} from '../src/study-network.js';
 import {calculateThreePhaseFault} from '../src/electrical-studies.js';
 import {referenceReadouts,transformerNameplate,electricalFieldValue} from '../src/reference-diagrams.js';
+
+// Exercise the actual training calculation used by the page, including its
+// topology and transformer allocation, without booting Firebase or the UI.
+function trainingResults(diagram) {
+ const page=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const geometry=page.slice(page.indexOf('      function terminals('),page.indexOf('      function transformerSequenceViolation('));
+ const engine=page.slice(page.indexOf('      const isElectrical ='),page.indexOf('      function measurementLines('));
+ const projection=page.slice(page.indexOf('      function projectPoint('),page.indexOf('      function flowAnalysis('));
+ return new Function('diagram',geometry+engine+projection+'\nreturn calculateElectricalState();')(diagram);
+}
+
+test('ideal training sources retain 230/13.8/4.16 kV and consistent load currents',()=>{
+ const d=bundledDiagram(SE56A01_ID),r=trainingResults(d);
+ assert.equal(r.get('abb-source-lt-ii').voltageKV,230);
+ assert.equal(r.get('abb-boiler-bus-b').voltageKV,13.8);
+ assert.equal(r.get('abb-load-a').activeMW,60);
+ assert.ok(Math.abs(r.get('abb-load-a').currentA-60000/(Math.sqrt(3)*13.8))<1e-6);
+ const small=r.get('abb-load-dist-01');
+ assert.equal(small.voltageKV,4.16);assert.equal(small.powerFactor,.93);
+ assert.ok(Math.abs(small.currentA-277.5722448027047)<1e-6);
+ for(const o of Object.values(d.items))if(o.isSource)delete o.electrical.idealVoltageBoundary;
+ assert.ok(trainingResults(d).get('abb-source-lt-ii').voltageKV<230,'legacy source behavior remains available');
+});
 
 test('the photographed screen has 45 contacts, 13 transformers and explicit native connections',()=>{
  const d=bundledDiagram(SE56A01_ID),values=Object.values(d.items);
