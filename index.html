@@ -1336,6 +1336,15 @@
       .reference-layout .item.closed .hmi-switch { fill: #f00000 !important; stroke: #152026 !important; }
       .reference-layout .item.open .hmi-switch { fill: #008000 !important; stroke: #152026 !important; }
       #stage.reference-layout .item .tech-shape:not(.hmi-switch) { fill: #d7d7d7; }
+      .diagram-trash { margin-top: 16px; border-top: 1px solid #d2dadd; padding-top: 12px; }
+      .diagram-trash summary { cursor: pointer; font-weight: 700; }
+      .diagram-trash-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e0e6e9; }
+      .diagram-trash-row span { flex: 1; overflow-wrap: anywhere; }
+      .diagram-trash-row small { display: block; color: #667780; margin-top: 3px; }
+      .diagram-trash-row button { padding: 8px 10px; border: 1px solid #b8c4c9; border-radius: 5px; background: #fff; }
+      .diagram-delete-confirm { max-width: 460px; }
+      .diagram-delete-confirm .actions { flex-wrap: wrap; }
+      #diagramDelete, #diagramDeleteConfirm { background: #b8342b; color: #fff; }
     </style>
     <link rel="stylesheet" href="./src/workbench.css?v=49.2" />
   </head>
@@ -1370,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.3.2</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.4</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -1719,6 +1728,10 @@
               Aplicar visibilidade
             </button>
           </div>
+          <details class="diagram-trash">
+            <summary>Lixeira <span id="diagramTrashCount">(0)</span></summary>
+            <div id="diagramTrashList"></div>
+          </details>
         </div>
         <form class="diagram-create" id="diagramCreateForm">
           <h3>Criar nova aba</h3>
@@ -1737,10 +1750,21 @@
           </div>
           <div class="actions">
             <button type="button" id="diagramRename">Renomear atual</button>
+            <button type="button" id="diagramDelete" class="control-danger">Excluir aba</button>
             <button class="ok">Criar e abrir</button>
           </div>
           <p id="diagramMessage" class="hint"></p>
         </form>
+      </div>
+    </dialog>
+    <dialog id="diagramDeleteBox" class="diagram-delete-confirm" aria-labelledby="diagramDeleteTitle">
+      <h2 id="diagramDeleteTitle">Excluir aba?</h2>
+      <p>A aba <strong id="diagramDeleteName"></strong> será removida da engenharia e da lista dos operadores.</p>
+      <p>O rascunho e a publicação serão guardados na <strong>Lixeira</strong>, onde você poderá restaurar a aba. O histórico de treinamento será mantido.</p>
+      <p id="diagramDeleteMessage" role="status"></p>
+      <div class="actions">
+        <button type="button" id="diagramDeleteCancel">Cancelar</button>
+        <button type="button" id="diagramDeleteConfirm" class="control-danger">Excluir e enviar à lixeira</button>
       </div>
     </dialog>
     <dialog id="conductorGroupBox" class="operator-login">
@@ -2569,10 +2593,12 @@
         ref,
         get,
         set,
+        update,
         remove,
         onValue,
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.3";
+      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.4";
+      import { diagramDeletionUpdates, diagramRestorationUpdates } from "./src/diagram-lifecycle.js?v=49.4";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
       import { attachLoadFlowWorkbench } from "./src/load-flow-workbench.js?v=49.2";
@@ -2647,7 +2673,11 @@
         currentDiagramId = localStorage.getItem("simuDiagramId") || "principal",
         diagramCatalog = {},
         operatorDiagramStates = new Map(),
-        publishedDiagramUnsubscribe = null;
+        publishedDiagramUnsubscribe = null,
+        publishedAvailabilityUnsubscribe = null,
+        diagramTrash = {},
+        pendingDiagramDeletionId = "",
+        diagramLifecycleBusy = false;
       $("#alarmCount").textContent = "Alarmes: " + alarmTotal;
       const gridDynamics = new GridDynamics();
       const timeEngine = new TimeSeriesEngine({
@@ -2737,13 +2767,76 @@
         if (visibility)
           visibility.checked =
             diagramCatalog[currentDiagramId]?.operatorVisible !== false;
+        const unavailable = !diagramCatalog[currentDiagramId] || diagramLifecycleBusy;
+        for (const id of ["save", "publish", "controlSaveDraft", "controlPublish", "diagramRename", "diagramDelete", "diagramVisibilitySave", "currentDiagramOperatorVisible"])
+          $("#" + id).disabled = unavailable;
+        $("#diagramSelect").disabled = diagramLifecycleBusy;
+        document.querySelector("#workspace .ribbon").inert = eng && !diagramCatalog[currentDiagramId];
+      }
+      function renderDiagramTrash() {
+        const list = $("#diagramTrashList");
+        list.innerHTML = "";
+        const entries = Object.entries(diagramTrash).filter(([, entry]) => entry?.deletedAt)
+          .sort((a, b) => b[1].deletedAt - a[1].deletedAt);
+        $("#diagramTrashCount").textContent = "(" + entries.length + ")";
+        if (!entries.length) list.textContent = "Nenhuma aba na lixeira.";
+        for (const [id, entry] of entries) {
+          const row = document.createElement("div"), label = document.createElement("span"),
+            date = document.createElement("small"), button = document.createElement("button");
+          row.className = "diagram-trash-row";
+          label.textContent = entry.metadata?.name || "Diagrama";
+          date.textContent = "Excluída em " + new Date(entry.deletedAt).toLocaleString("pt-BR");
+          label.append(date);
+          button.type = "button"; button.textContent = "Restaurar"; button.disabled = diagramLifecycleBusy;
+          button.onclick = () => restoreDiagramFromTrash(id);
+          row.append(label, button); list.append(row);
+        }
+      }
+      async function loadDiagramTrash() {
+        if (!eng) return;
+        try {
+          const snapshot = await get(ref(db, "engineering/diagramTrash"));
+          diagramTrash = snapshot.val() || {};
+          renderDiagramTrash();
+        } catch (error) {
+          $("#diagramTrashList").textContent = "Não foi possível carregar a lixeira: " + (error.code || error.message);
+        }
+      }
+      async function restoreDiagramFromTrash(id) {
+        if (!eng || diagramLifecycleBusy) return;
+        diagramLifecycleBusy = true; renderDiagramCatalog(); renderDiagramTrash();
+        try {
+          const [snapshot, catalogSnapshot] = await Promise.all([
+            get(ref(db, "engineering/diagramTrash/" + id)),
+            get(ref(db, "engineering/diagramCatalog/" + id)),
+          ]);
+          if (catalogSnapshot.exists() && !catalogSnapshot.val().deletedAt)
+            throw new Error("Esta aba já está ativa. Atualize a lista de diagramas.");
+          const archive = snapshot.val();
+          await update(ref(db), diagramRestorationUpdates(id, archive));
+          delete diagramTrash[id];
+          diagramCatalog[id] = archive.metadata;
+          await switchDiagram(id);
+          $("#diagramMessage").textContent = "Aba restaurada: " + archive.metadata.name + " ✓";
+        } catch (error) {
+          $("#diagramMessage").textContent = "Falha ao restaurar: " + (error.code || error.message);
+        } finally {
+          diagramLifecycleBusy = false; renderDiagramCatalog(); renderDiagramTrash();
+        }
+      }
+      async function assertCurrentDiagramAvailable() {
+        if (!eng || !currentDiagramId || !diagramCatalog[currentDiagramId] || diagramLifecycleBusy)
+          throw new Error("Crie ou selecione uma aba ativa antes de salvar ou publicar.");
+        const snapshot = await get(ref(db, "engineering/diagramCatalog/" + currentDiagramId));
+        if (snapshot.val()?.deletedAt) throw new Error("Esta aba foi excluída. Restaure-a pela lixeira.");
       }
       async function ensureDiagramCatalog() {
         const catalogSnapshot = await get(ref(db, "engineering/diagramCatalog"));
         if (catalogSnapshot.exists()) {
           diagramCatalog = withBundledDiagrams(catalogSnapshot.val() || {});
           if (!diagramCatalog[currentDiagramId])
-            currentDiagramId = Object.keys(diagramCatalog)[0] || "principal";
+            currentDiagramId = Object.keys(diagramCatalog)[0] || "";
+          for (const id of operatorDiagramStates.keys()) if (!diagramCatalog[id]) operatorDiagramStates.delete(id);
           renderDiagramCatalog();
           return;
         }
@@ -2791,6 +2884,7 @@
             };
         }
         diagramCatalog = withBundledDiagrams(diagramCatalog);
+        for (const id of operatorDiagramStates.keys()) if (!diagramCatalog[id]) operatorDiagramStates.delete(id);
         const visibleIds = Object.keys(diagramCatalog).filter(
           (id) => diagramCatalog[id]?.operatorVisible !== false,
         );
@@ -2895,18 +2989,30 @@
       }
       function subscribePublishedDiagram(id = currentDiagramId) {
         if (publishedDiagramUnsubscribe) publishedDiagramUnsubscribe();
-        if (!id || diagramCatalog[id]?.operatorVisible === false) {
+        if (publishedAvailabilityUnsubscribe) publishedAvailabilityUnsubscribe();
+        publishedDiagramUnsubscribe = publishedAvailabilityUnsubscribe = null;
+        if (!id || !diagramCatalog[id] || diagramCatalog[id]?.operatorVisible === false) {
           diagram = { name: "Nenhum diagrama disponível", items: {} };
           resetDiagramWorkspace();
           $("#status").textContent =
             "Nenhuma aba foi disponibilizada para o operador";
           return;
         }
-        const path = diagramCatalog[id] ? publishedPath(id) : "published/current";
+        const path = publishedPath(id);
+        publishedAvailabilityUnsubscribe = onValue(ref(db, "published/catalog/" + id), async (snapshot) => {
+          if (eng || id !== currentDiagramId) return;
+          const meta = snapshot.val();
+          if (!meta?.deletedAt && meta?.operatorVisible !== false) return;
+          for (const modal of ["cmd", "busBox"])
+            if ($("#" + modal).open) $("#" + modal).close();
+          selected = null; selectedIds.clear();
+          await loadPublishedCatalog();
+          if (!eng) subscribePublishedDiagram(currentDiagramId);
+        });
         publishedDiagramUnsubscribe = onValue(
           ref(db, path),
           (snapshot) => {
-            if (eng) return;
+            if (eng || id !== currentDiagramId) return;
             const saved = operatorSession ? operatorDiagramState(id) : null;
             if (saved) diagram = saved;
             else if (snapshot.exists()) diagram = normalizeDiagram(snapshot.val());
@@ -2926,6 +3032,7 @@
         );
       }
       async function saveCurrentDiagramDraft() {
+        await assertCurrentDiagramAvailable();
         const data = cleanDiagram();
         data.name = diagramCatalog[currentDiagramId]?.name || data.name || "Diagrama";
         const meta = diagramMetadata(currentDiagramId, data);
@@ -2941,6 +3048,7 @@
         return data;
       }
       async function publishCurrentDiagram() {
+        await assertCurrentDiagramAvailable();
         const now = Date.now(),
           data = { ...cleanDiagram(), publishedAt: now };
         data.name = diagramCatalog[currentDiagramId]?.name || data.name || "Diagrama";
@@ -5719,6 +5827,7 @@
         if (eng) renderInstrumentLinks(stage, diagram, selectedIds, E);
         const list = Object.entries(diagram.items || {});
         $("#empty").hidden = !!list.length;
+        $("#empty").textContent = eng && !currentDiagramId ? "Nenhuma aba ativa. Abra Diagramas para criar ou restaurar uma aba." : "Nenhum diagrama publicado";
         for (const [k, o] of list) {
           const g = E("g", {
             class:
@@ -8321,9 +8430,71 @@
         renderDiagramCatalog();
         $("#diagramMessage").textContent = "";
         $("#diagramBox").showModal();
+        loadDiagramTrash();
       };
       $("#diagramClose").onclick = () => $("#diagramBox").close();
+      $("#diagramDelete").onclick = () => {
+        if (!eng || diagramLifecycleBusy || !diagramCatalog[currentDiagramId]) return;
+        pendingDiagramDeletionId = currentDiagramId;
+        $("#diagramDeleteName").textContent = diagramCatalog[currentDiagramId].name || "Diagrama";
+        $("#diagramDeleteMessage").textContent = "";
+        $("#diagramDeleteBox").showModal();
+      };
+      $("#diagramDeleteCancel").onclick = () => {
+        if (!diagramLifecycleBusy) $("#diagramDeleteBox").close();
+      };
+      $("#diagramDeleteBox").onclose = () => { pendingDiagramDeletionId = ""; };
+      $("#diagramDeleteBox").oncancel = (event) => {
+        if (diagramLifecycleBusy) event.preventDefault();
+      };
+      $("#diagramDeleteConfirm").onclick = async () => {
+        const id = pendingDiagramDeletionId;
+        if (!eng || diagramLifecycleBusy || !id || id !== currentDiagramId || !diagramCatalog[id]) return;
+        const draft = cleanDiagram(), metadata = diagramMetadata(id, draft);
+        diagramLifecycleBusy = true;
+        $("#diagramDeleteConfirm").disabled = $("#diagramDeleteCancel").disabled = true;
+        $("#diagramDeleteMessage").textContent = "Enviando aba para a lixeira…";
+        renderDiagramCatalog();
+        try {
+          const [publication, publishedMeta, preferred, currentMeta] = await Promise.all([
+            get(ref(db, publishedPath(id))),
+            get(ref(db, "published/catalog/" + id)),
+            get(ref(db, "published/defaultDiagramId")),
+            get(ref(db, "engineering/diagramCatalog/" + id)),
+          ]);
+          if (currentMeta.val()?.deletedAt) throw new Error("Esta aba já foi excluída. Atualize a lista.");
+          const nextDefaultId = Object.entries(diagramCatalog).find(([key, meta]) =>
+            key !== id && meta.operatorVisible !== false && (meta.publishedAt || bundledDiagram(key)))?.[0] || null;
+          const updates = diagramDeletionUpdates({ id, metadata, draft,
+            publication: publication.val(),
+            publishedMetadata: publishedMeta.exists() ? publishedMeta.val() : bundledDiagram(id) ? withBundledDiagrams()[id] : null,
+            defaultId: preferred.val(), nextDefaultId });
+          await update(ref(db), updates);
+          diagramTrash[id] = updates["engineering/diagramTrash/" + id];
+          delete diagramCatalog[id];
+          operatorDiagramStates.delete(id);
+          localStorage.removeItem("simuDraft:" + id);
+          currentDiagramId = "";
+          localStorage.removeItem("simuDiagramId");
+          diagram = { name: "Nenhum diagrama", items: {}, controlRules: [] };
+          for (const modal of ["cmd", "busBox", "controlBox"])
+            if ($("#" + modal).open) $("#" + modal).close();
+          const nextId = Object.keys(diagramCatalog)[0];
+          if (nextId) await switchDiagram(nextId);
+          else resetDiagramWorkspace();
+          $("#diagramDeleteBox").close();
+          $("#diagramMessage").textContent = "Aba excluída: " + metadata.name + ". Você pode restaurá-la pela lixeira.";
+          $("#status").textContent = "Aba enviada para a lixeira: " + metadata.name;
+        } catch (error) {
+          $("#diagramDeleteMessage").textContent = "Falha ao excluir: " + (error.code || error.message);
+        } finally {
+          diagramLifecycleBusy = false;
+          $("#diagramDeleteConfirm").disabled = $("#diagramDeleteCancel").disabled = false;
+          renderDiagramCatalog(); renderDiagramTrash();
+        }
+      };
       $("#diagramVisibilitySave").onclick = async () => {
+        if (!eng || diagramLifecycleBusy || !diagramCatalog[currentDiagramId]) return;
         const meta = diagramMetadata(currentDiagramId, diagram, {
           operatorVisible: $("#currentDiagramOperatorVisible").checked,
         });
@@ -8351,6 +8522,7 @@
         }
       };
       $("#diagramRename").onclick = async () => {
+        if (!eng || diagramLifecycleBusy || !diagramCatalog[currentDiagramId]) return;
         const name = $("#newDiagramName").value.trim();
         if (!name) {
           $("#diagramMessage").textContent = "Informe o novo nome do diagrama atual.";
@@ -8380,6 +8552,7 @@
       };
       $("#diagramCreateForm").onsubmit = async (event) => {
         event.preventDefault();
+        if (!eng || diagramLifecycleBusy) return;
         const name = $("#newDiagramName").value.trim(),
           description = $("#newDiagramDescription").value.trim(),
           mode = $("#newDiagramMode").value,
@@ -8521,13 +8694,15 @@
             $("#loginBox").close();
             if ($("#operatorBox").open) $("#operatorBox").close();
             await ensureDiagramCatalog();
-            const d = await get(ref(db, draftPath()));
-            if (d.exists()) diagram = normalizeDiagram(d.val());
-            else {
-              const p = await get(ref(db, publishedPath()));
-              if (p.exists()) diagram = normalizeDiagram(p.val());
-              else diagram = bundledDiagram(currentDiagramId) || { name: diagramCatalog[currentDiagramId]?.name || "Diagrama", items: {} };
-            }
+            if (currentDiagramId) {
+              const d = await get(ref(db, draftPath()));
+              if (d.exists()) diagram = normalizeDiagram(d.val());
+              else {
+                const p = await get(ref(db, publishedPath()));
+                if (p.exists()) diagram = normalizeDiagram(p.val());
+                else diagram = bundledDiagram(currentDiagramId) || { name: diagramCatalog[currentDiagramId]?.name || "Diagrama", items: {} };
+              }
+            } else diagram = { name: "Nenhum diagrama", items: {}, controlRules: [] };
             await loadEngineeringDiagramStates();
             resetDiagramWorkspace();
             $("#status").textContent = "Engenharia conectada";

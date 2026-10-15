@@ -26,10 +26,10 @@ function visibilityHarness(id, initial) {
  const controls={'#currentDiagramOperatorVisible':{checked:false},'#diagramMessage':{textContent:''}};
  const catalog={[id]:{...initial}},writes=new Map();
  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
- const handler=new AsyncFunction('diagramMetadata','currentDiagramId','diagram','$','ref','set','db','diagramCatalog','renderDiagramCatalog','bundledDiagram',source);
+ const handler=new AsyncFunction('diagramMetadata','currentDiagramId','diagram','$','ref','set','db','diagramCatalog','renderDiagramCatalog','bundledDiagram','eng','diagramLifecycleBusy',source);
  return {catalog,writes,controls,async apply(visible){
   controls['#currentDiagramOperatorVisible'].checked=visible;
-  await handler((key,data,extra)=>({...catalog[key],...extra}),id,{items:{}},key=>controls[key],(db,path)=>path,async(path,value)=>writes.set(path,{...value}),{},catalog,()=>{},bundledDiagram);
+  await handler((key,data,extra)=>({...catalog[key],...extra}),id,{items:{}},key=>controls[key],(db,path)=>path,async(path,value)=>writes.set(path,{...value}),{},catalog,()=>{},bundledDiagram,true,false);
  }};
 }
 test('the visibility control hides and restores the bundled tab without publishing its draft',async()=>{
@@ -84,6 +84,6 @@ test('application resolves the baseline in both viewing and engineering and cach
  assert.ok(index.includes('else diagram = bundledDiagram(id) ||'));
  assert.ok(index.includes('else diagram = bundledDiagram(currentDiagramId) ||'));
  const sw=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
- assert.ok(sw.includes('./src/bundled-diagrams.js?v=49.3'));
- assert.ok(sw.includes('simusystem-v49.3'));
+ assert.ok(sw.includes('./src/bundled-diagrams.js?v=49.4'));
+ assert.ok(sw.includes('simusystem-v49.4'));
 });
