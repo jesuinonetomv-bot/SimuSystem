@@ -1370,7 +1370,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.3.1</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.3.2</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -8334,7 +8334,7 @@
               meta,
             ),
           ];
-          if (meta.publishedAt)
+          if (meta.publishedAt || bundledDiagram(currentDiagramId))
             writes.push(
               set(ref(db, "published/catalog/" + currentDiagramId), meta),
             );

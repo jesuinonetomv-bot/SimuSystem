@@ -20,6 +20,38 @@ test('saved catalog visibility and modified diagrams override the bundled baseli
  const a=bundledDiagram(GERAL_ALUNORTE_ID);a.items['ga-dj-12'].state='closed';
  assert.equal(bundledDiagram(GERAL_ALUNORTE_ID).items['ga-dj-12'].state,'open');
 });
+function visibilityHarness(id, initial) {
+ const index=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const source=index.match(/\$\("#diagramVisibilitySave"\)\.onclick = async \(\) => \{([\s\S]*?)\n      \};/)[1];
+ const controls={'#currentDiagramOperatorVisible':{checked:false},'#diagramMessage':{textContent:''}};
+ const catalog={[id]:{...initial}},writes=new Map();
+ const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+ const handler=new AsyncFunction('diagramMetadata','currentDiagramId','diagram','$','ref','set','db','diagramCatalog','renderDiagramCatalog','bundledDiagram',source);
+ return {catalog,writes,controls,async apply(visible){
+  controls['#currentDiagramOperatorVisible'].checked=visible;
+  await handler((key,data,extra)=>({...catalog[key],...extra}),id,{items:{}},key=>controls[key],(db,path)=>path,async(path,value)=>writes.set(path,{...value}),{},catalog,()=>{},bundledDiagram);
+ }};
+}
+test('the visibility control hides and restores the bundled tab without publishing its draft',async()=>{
+ const h=visibilityHarness(GERAL_ALUNORTE_ID,{name:'GERAL ALUNORTE',operatorVisible:true});
+ await h.apply(false);
+ const path='published/catalog/'+GERAL_ALUNORTE_ID;
+ assert.equal(h.writes.get(path)?.operatorVisible,false);
+ const operatorCatalog=withBundledDiagrams({[GERAL_ALUNORTE_ID]:h.writes.get(path)});
+ assert.equal(Object.values(operatorCatalog).some(meta=>meta.operatorVisible!==false),false);
+ assert.equal(h.catalog[GERAL_ALUNORTE_ID].operatorVisible,false);
+ assert.deepEqual([...h.writes.keys()].sort(),['engineering/diagramCatalog/'+GERAL_ALUNORTE_ID,path].sort());
+ await h.apply(true);
+ assert.equal(h.writes.get(path).operatorVisible,true);
+});
+test('the visibility control keeps an unpublished custom diagram out of the public catalog',async()=>{
+ const h=visibilityHarness('private-draft',{name:'Projeto em elaboração',operatorVisible:true});
+ await h.apply(false);
+ assert.deepEqual([...h.writes.keys()],['engineering/diagramCatalog/private-draft']);
+ const published=visibilityHarness('existing',{name:'Publicado',publishedAt:123});
+ await published.apply(false);
+ assert.equal(published.writes.get('published/catalog/existing').operatorVisible,false);
+});
 test('unknown data survive RTDB null omission without resetting engineer-entered values',()=>{
  const d=bundledDiagram(GERAL_ALUNORTE_ID);const o=d.items['ga-tf-a'];
  delete o.electrical.ratedMVA;delete o.electrical.impedancePercent;o.electrical.secondaryKV=13.8;
