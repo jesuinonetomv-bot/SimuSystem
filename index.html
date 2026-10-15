@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.4</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -2361,6 +2361,7 @@
                 min="0.1"
                 step="0.1"
             /></label>
+            <p id="transformerNameplateNote" class="ef transformer hint" hidden></p>
             <label class="ef transformer"
               >Tensão primária (kV)<input
                 name="primaryKV"
@@ -2597,7 +2598,8 @@
         remove,
         onValue,
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.4";
+      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.5";
+      import { transformerNameplate, referenceReadouts, electricalFieldValue } from "./src/reference-diagrams.js?v=49.5";
       import { diagramDeletionUpdates, diagramRestorationUpdates } from "./src/diagram-lifecycle.js?v=49.4";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
@@ -4972,12 +4974,14 @@
         let raw = isInstrument(o) ? instrumentReadout(o, diagram.items, electricalResults) : measurementLines(k, o, true);
         if (isInstrument(o) && o.hiddenMeasurements?.[o.type === "vt" ? "voltage" : "current"]) raw = [];
         if (style === "compact") {
-          raw = raw.filter(line => /^(TC ideal|TP ideal|Relação:|Tensão:|Corrente:|Potência ativa:|Potência reativa:|Desenergizado)/.test(line));
+          const factor = o.reconstruction?.compactPowerFactor ? raw.find(line => line.startsWith("Fator de potência:")) : null;
+          raw = raw.filter(line => /^(TC ideal|TP ideal|Relação:|Tensão:|Corrente:|Potência:|Potência ativa:|Potência reativa:|Desenergizado)/.test(line));
+          if (factor) raw.push(factor);
           const p = raw.find(line => line.startsWith("Potência ativa:")), q = raw.find(line => line.startsWith("Potência reativa:"));
           raw = raw.filter(line => !line.startsWith("Potência ativa:") && !line.startsWith("Potência reativa:"));
           if (p || q) raw.push([p?.replace("Potência ativa: ", "P "), q?.replace("Potência reativa: ", "Q ")].filter(Boolean).join(" · "));
         }
-        const lines = raw.map((line) => line.startsWith("Relação V/Hz: ") ? "V/Hz " + line.slice(16) :
+        const lines = raw.map((line) => line.startsWith("Fator de potência: ") ? line.replace("Fator de potência: ", "FP ") : line.startsWith("Relação V/Hz: ") ? "V/Hz " + line.slice(16) :
           line.includes(": ") ? line.slice(line.indexOf(": ") + 2) : line);
         if (!lines.length) return;
         const base =
@@ -5154,7 +5158,7 @@
         g.append(
           E(
             "text",
-            { x: tx, y: ty, class: "tag", "font-size": fs, ...(o.reconstruction?.tagColor ? { style: "fill:" + o.reconstruction.tagColor } : {}) },
+            { x: tx, y: ty, class: "tag", "font-size": fs, "text-anchor": o.reconstruction?.labelAnchor || "middle", ...(o.reconstruction?.tagColor ? { style: "fill:" + o.reconstruction.tagColor + ";text-anchor:" + (o.reconstruction.labelAnchor || "middle") + ";font-size:" + fs + "px" } : {}) },
             o.name || "",
           ),
         );
@@ -5168,17 +5172,19 @@
                 class: "tag",
                 "font-size": Math.max(8, fs - 2),
                 fill: "#596971",
+                "text-anchor": o.reconstruction?.labelAnchor || "middle",
+                ...(o.reconstruction?.tagColor ? { style: "fill:" + o.reconstruction.tagColor + ";text-anchor:" + (o.reconstruction.labelAnchor || "middle") + ";font-size:" + Math.max(8, fs - 2) + "px" } : {}),
               },
               o.description,
             ),
           );
-        if ($("#showNameplates").checked && !diagram.reconstruction) {
+        if ($("#showNameplates").checked && (!diagram.reconstruction || diagram.reconstruction.showNameplates)) {
           const e = electricalData(o);
-          let rating = o.type === "transformer" ? e.ratedMVA + " MVA · " + e.primaryKV + "/" + e.secondaryKV + " kV" :
+          let rating = o.type === "transformer" ? transformerNameplate(o, e) :
             o.type === "utility" ? "Rede · " + e.nominalKV + " kV" :
             o.type === "turbogenerator" ? e.generatorRatedMVA + " MVA · " + e.nominalKV + " kV" :
             "";
-          if (rating) g.append(E("text", { x: tx, y: ty + fs + 3 + (o.description ? fs + 1 : 0), class: "tag nameplate" }, rating));
+          if (rating) g.append(E("text", { x: tx, y: ty + fs + 3 + (o.description ? fs + 1 : 0), class: "tag nameplate", "text-anchor": o.reconstruction?.labelAnchor || "middle", ...(o.reconstruction?.tagColor ? { style: "fill:" + o.reconstruction.tagColor + ";text-anchor:" + (o.reconstruction.labelAnchor || "middle") } : {}) }, rating));
         }
       }
       function conductorGroup(id) {
@@ -5799,6 +5805,7 @@
       function draw(evaluateAlarm = false, skipSupplyAlarms = false) {
         stage.classList.toggle("reference-layout", !!diagram.reconstruction);
         $("#diagramReviewNotice").hidden = !diagram.reconstruction;
+        $("#diagramReviewNotice").textContent = diagram.reconstruction?.reviewNote || "GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.";
         stage.innerHTML = "";
         const viewDiagram = diagram,
           globalDiagram = globalSimulationDiagram();
@@ -5825,6 +5832,7 @@
         monitorTransformerOverflux(evaluateAlarm);
         monitorGeneratorOverload(evaluateAlarm);
         if (eng) renderInstrumentLinks(stage, diagram, selectedIds, E);
+        const diagramReadouts = diagram.reconstruction?.showMeasurements ? referenceReadouts(diagram, electricalResults, study.network()) : new Map();
         const list = Object.entries(diagram.items || {});
         $("#empty").hidden = !!list.length;
         $("#empty").textContent = eng && !currentDiagramId ? "Nenhuma aba ativa. Abra Diagramas para criar ou restaurar uma aba." : "Nenhum diagrama publicado";
@@ -5851,7 +5859,7 @@
             "data-id": k,
           });
           if (renderTechnicalSymbol(g, o, E)) {
-            const labelDistance = { utility: 62, transformer: 58, turbogenerator: 52, load: 50, motor: 50, capacitor: 50 }[o.type] || 36;
+            const labelDistance = o.reconstruction?.labelDistance ?? ({ utility: 62, transformer: 58, turbogenerator: 52, load: 50, motor: 50, capacitor: 50 }[o.type] || 36);
             addLabels(g, o, o.x ?? (o.x1 + o.x2) / 2, o.y ?? (o.y1 + o.y2) / 2, o.type === "cable" ? 18 : labelDistance * (o.scale || 1));
           } else if (o.type === "annotationLine") {
             g.append(
@@ -5928,7 +5936,7 @@
                   transform:
                     "rotate(" + (o.rotation || 0) + " " + o.x + " " + o.y + ")",
                 },
-                o.name || "Texto",
+                diagramReadouts.get(k) ?? o.name ?? "Texto",
               ),
             );
             g.append(
@@ -5955,6 +5963,8 @@
             );
             if (!o.conductorGroupId)
               addLabels(g, o, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, 14);
+            if (o.reconstruction?.boundaryArrow)
+              g.append(E("path", { d: "M" + (o.x2 - 5) + " " + (o.y2 - 8) + " L" + (o.x2 + 5) + " " + (o.y2 - 8) + " L" + o.x2 + " " + o.y2 + " Z", fill: "#101820" }));
             g.append(
               E("rect", {
                 x: Math.min(o.x1, o.x2) - 9,
@@ -5977,7 +5987,7 @@
           if (eng && isElectrical(o))
             for (const p of terminals(o))
               g.append(E("circle", { cx: p.x, cy: p.y, r: 5, class: "port" }));
-          if (!diagram.reconstruction) addMeasurement(g, k, o);
+          if (!diagram.reconstruction || (diagram.reconstruction.showMeasurements && o.reconstruction?.showMeasurements === true) || studyOverlay?.values.has(k)) addMeasurement(g, k, o);
           g.onpointerdown = (e) => {
             if (eng) down(e, k);
           };
@@ -7058,6 +7068,9 @@
           if (input) input.value = e[n] ?? "";
         }
         sequenceFieldEditor.open(o);
+        const plateNote = $("#transformerNameplateNote");
+        plateNote.hidden = o.type !== "transformer" || !Array.isArray(e.ratedMVARange);
+        plateNote.textContent = plateNote.hidden ? "" : "Potências de placa: " + e.ratedMVARange.join("/") + " MVA. O campo de potência nominal define a base usada no cenário; informe Z% nessa mesma base.";
         $("#electricalBox").showModal();
       }
       const topologyRoleNames = {
@@ -7809,8 +7822,7 @@
           if (["studyQMinMvar", "studyQMaxMvar", "shortCircuitMVAMin", "sourceXRMin", "transientPercent", "generatorRatedPowerFactor", "shortCircuitRatingKA", "peakWithstandKA"].includes(n) && input.value === "") {
             if (o.electrical) delete o.electrical[n]; continue;
           }
-          data[n] =
-            input.tagName === "SELECT" ? input.value : Number(input.value);
+          data[n] = electricalFieldValue(input);
         }
         o.electrical = { ...o.electrical, ...data, ...sequenceData };
         local();

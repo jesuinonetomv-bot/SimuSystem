@@ -38,7 +38,8 @@ test('the visibility control hides and restores the bundled tab without publishi
  const path='published/catalog/'+GERAL_ALUNORTE_ID;
  assert.equal(h.writes.get(path)?.operatorVisible,false);
  const operatorCatalog=withBundledDiagrams({[GERAL_ALUNORTE_ID]:h.writes.get(path)});
- assert.equal(Object.values(operatorCatalog).some(meta=>meta.operatorVisible!==false),false);
+ assert.equal(operatorCatalog[GERAL_ALUNORTE_ID].operatorVisible,false);
+ assert.equal(operatorCatalog['se-56a-01-abb'].operatorVisible,true);
  assert.equal(h.catalog[GERAL_ALUNORTE_ID].operatorVisible,false);
  assert.deepEqual([...h.writes.keys()].sort(),['engineering/diagramCatalog/'+GERAL_ALUNORTE_ID,path].sort());
  await h.apply(true);
@@ -84,6 +85,6 @@ test('application resolves the baseline in both viewing and engineering and cach
  assert.ok(index.includes('else diagram = bundledDiagram(id) ||'));
  assert.ok(index.includes('else diagram = bundledDiagram(currentDiagramId) ||'));
  const sw=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
- assert.ok(sw.includes('./src/bundled-diagrams.js?v=49.4'));
- assert.ok(sw.includes('simusystem-v49.4'));
+ assert.ok(sw.includes('./src/bundled-diagrams.js?v=49.5'));
+ assert.ok(sw.includes('simusystem-v49.5'));
 });
