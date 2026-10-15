@@ -2,7 +2,7 @@
 // measured injections and switching graph. This is not the AC study solver.
 // Ideal cycles have no unique allocation: display only their bridge flows.
 export const FLOW_EPSILON = 1e-4;
-const finite = (value) => Number.isFinite(Number(value));
+const finite = (value) => value !== null && value !== "" && Number.isFinite(Number(value));
 const number = (value) => finite(value) ? Number(value) : 0;
 
 function disjointSet(keys) {
@@ -14,6 +14,31 @@ function disjointSet(keys) {
     return r;
   };
   return { root, join(a, b) { a = root(a); b = root(b); if (a !== b) parent.set(b, a); } };
+}
+
+// Removing a bridge leaves one possible P/Q balance, even when its impedance
+// has not been entered. Source counts also identify unfixed multi-grid shares.
+function bridgeFlows(nodes, adjacency, injections, accepts = () => true, unfixed = new Map()) {
+  const flows = new Map(), order = new Map(), low = new Map(); let clock = 0;
+  function visit(n, parentEdge = null) {
+    order.set(n, ++clock); low.set(n, clock);
+    const sum = { ...injections.get(n), unfixedSources: unfixed.get(n) || 0 };
+    for (const e of adjacency.get(n)) {
+      if (!accepts(e) || e.key === parentEdge) continue;
+      const next = e.a === n ? e.b : e.a;
+      if (order.has(next)) { low.set(n, Math.min(low.get(n), order.get(next))); continue; }
+      const child = visit(next, e.key);
+      low.set(n, Math.min(low.get(n), low.get(next)));
+      sum.p += child.p; sum.q += child.q; sum.unfixedSources += child.unfixedSources;
+      if (low.get(next) > order.get(n)) {
+        const sign = e.a === n ? -1 : 1;
+        flows.set(e.key, { p: sign * child.p, q: sign * child.q, unfixedSources: child.unfixedSources });
+      }
+    }
+    return sum;
+  }
+  for (const n of nodes) if (!order.has(n)) visit(n);
+  return flows;
 }
 
 function solveAllocation(nodes, edges, injections) {
@@ -60,6 +85,7 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
   const nodes = [...new Set([...points.keys()].map(contact.root))];
   const injection = new Map(nodes.map((key) => [key, { p: 0, q: 0 }]));
   const sourceNodes = new Map(), references = new Map(), invalidItems = new Set(network.issues.map((issue) => issue.id));
+  const pendingImpedanceItems = new Set();
   const edges = [];
   for (const [i, raw] of network.edges.entries()) {
     if (raw.id === null) continue;
@@ -76,7 +102,10 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
         impedance = Math.hypot(number(raw.resistanceOhm), number(raw.reactanceOhm)) * 100 / (kv * kv);
       }
     }
-    if (raw.known === false || impedance < 0) invalidItems.add(raw.id);
+    const negative = o.type === "transformer"
+      ? finite(data.impedancePercent) && Number(data.impedancePercent) < 0
+      : ["line", "cable"].includes(o.type) && [data.resistanceOhm, data.reactanceOhm].some(v => finite(v) && Number(v) < 0);
+    if (negative || impedance < 0) invalidItems.add(raw.id);
     edges.push({ ...raw, key: i, a, b, from: points.get(raw.a), to: points.get(raw.b),
       ideal: !raw.hasImpedance, weight: impedance > 0 ? 1 / impedance : 0 });
   }
@@ -127,6 +156,28 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
       unbalancedIslands++; ids.forEach((id) => invalidItems.add(id)); continue;
     }
 
+    for (const e of islandEdges) if (e.known === false) pendingImpedanceItems.add(e.id);
+    const unfixed = new Map();
+    for (const [id, n] of slack) if (!["utility", "turbogenerator"].includes(items[id].type))
+      unfixed.set(n, (unfixed.get(n) || 0) + 1);
+    const unfixedCount = [...unfixed.values()].reduce((sum, count) => sum + count, 0);
+    const unique = bridgeFlows(region, adjacency, injection, () => true, unfixed);
+    const unknownCycle = islandEdges.some(e => e.known === false && !unique.has(e.key));
+
+    // Unknown impedances cannot determine a mesh split. Its upstream/downstream
+    // bridge flows still follow KCL; suppress only the unresolved paths.
+    if (unknownCycle || unfixedCount > 1) {
+      for (const e of islandEdges) {
+        const flow = unique.get(e.key);
+        if (!flow || flow.unfixedSources > 0 && flow.unfixedSources < unfixedCount) {
+          ambiguousItems.add(e.id); continue;
+        }
+        if (Math.max(Math.abs(flow.p), Math.abs(flow.q)) < FLOW_EPSILON || !measurements.get(e.id)?.energized) continue;
+        segments.push({ key: e.key, itemId: e.id, from: { ...e.from }, to: { ...e.to }, activeMW: flow.p, reactiveMvar: flow.q });
+      }
+      continue;
+    }
+
     const ideal = disjointSet(region);
     for (const e of islandEdges) if (e.ideal) ideal.join(e.a, e.b);
     const groups = [...new Set(region.map(ideal.root))], coarseP = new Map(groups.map((g) => [g, 0])), coarseQ = new Map(coarseP);
@@ -147,27 +198,7 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
       residual.get(e.a).p -= flow.p; residual.get(e.a).q -= flow.q;
       residual.get(e.b).p += flow.p; residual.get(e.b).q += flow.q;
     }
-    // Tarjan bridges and subtree sums recover unique flows inside ideal buses.
-    // A mesh made only of ideal connections is deliberately left unassigned.
-    const order = new Map(), low = new Map(); let clock = 0;
-    function visit(n, parentEdge = null) {
-      order.set(n, ++clock); low.set(n, clock);
-      const sum = { ...residual.get(n) };
-      for (const e of adjacency.get(n)) {
-        if (!e.ideal || e.key === parentEdge) continue;
-        const next = e.a === n ? e.b : e.a;
-        if (order.has(next)) { low.set(n, Math.min(low.get(n), order.get(next))); continue; }
-        const child = visit(next, e.key);
-        low.set(n, Math.min(low.get(n), low.get(next)));
-        sum.p += child.p; sum.q += child.q;
-        if (low.get(next) > order.get(n)) {
-          const sign = e.a === n ? -1 : 1;
-          flows.set(e.key, { p: sign * child.p, q: sign * child.q });
-        }
-      }
-      return sum;
-    }
-    for (const n of region) if (!order.has(n)) visit(n);
+    for (const [key, flow] of bridgeFlows(region, adjacency, residual, e => e.ideal)) flows.set(key, flow);
     for (const e of islandEdges) {
       const flow = flows.get(e.key);
       if (!flow) { if (e.ideal) ambiguousItems.add(e.id); continue; }
@@ -178,7 +209,30 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
         activeMW: flow.p, reactiveMvar: flow.q });
     }
   }
-  return { segments, ambiguousItems, invalidItems, unbalancedIslands };
+  return { segments, ambiguousItems, invalidItems, pendingImpedanceItems, unbalancedIslands };
+}
+
+// Every diagram uses the same terminal graph for transformer measurements and
+// animation. Layout metadata must never opt a tab out of the training engine.
+export function applyTransformerFlowMeasurements(network, measurements, flow, { electricalData = o => o.electrical || {} } = {}) {
+  const segments = new Map(flow.segments.map(segment => [segment.itemId, segment]));
+  for (const [id, item] of Object.entries(network.items)) {
+    if (item.type !== "transformer" || !measurements.has(id) || flow.invalidItems.has(id)) continue;
+    const result = measurements.get(id), segment = segments.get(id);
+    if (flow.ambiguousItems.has(id)) {
+      Object.assign(result, { powerIndeterminate: true, activeMW: 0, reactiveMvar: 0, currentA: 0, loadingPercent: 0, powerFactor: 0 });
+      continue;
+    }
+    const p = segment?.activeMW || 0, q = segment?.reactiveMvar || 0;
+    const apparent = Math.hypot(p, q), data = electricalData(item), voltage = result.voltageSecondaryKV;
+    Object.assign(result, { powerIndeterminate: false, activeMW: p, reactiveMvar: q,
+      connectedBothSides: !!segment || result.connectedBothSides,
+      powerFactor: apparent ? Math.abs(p) / apparent : 1,
+      currentA: voltage > 0 ? Math.sign(p || q) * apparent * 1000 / (Math.sqrt(3) * voltage) : 0,
+      loadingPercent: Math.max(data.ratedMVA > 0 ? apparent / data.ratedMVA * 100 : 0,
+        Math.max(0, (result.overfluxPercent || 0) / 100 - 1) * 500) });
+  }
+  return measurements;
 }
 
 export function arrowPose(segment, quantity, timestamp, index = 0, count = 1, separated = true, reduced = false) {
@@ -263,3 +317,4 @@ export function createFlowAnimator({ stage, page = stage.ownerDocument, ownerWin
     },
   };
 }
+

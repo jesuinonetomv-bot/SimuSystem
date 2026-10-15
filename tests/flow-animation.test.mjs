@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSwitchingStudy } from "../src/switching-analysis.js";
-import { calculateAnimatedFlow, arrowPose, createFlowAnimator } from "../src/flow-animation.js";
+import { calculateAnimatedFlow, arrowPose, createFlowAnimator, applyTransformerFlowMeasurements } from "../src/flow-animation.js";
 
 const bus = (x) => ({ type: "bus", x1: x, y1: 0, x2: x + 200, y2: 0 });
 const binding = (terminalA, terminalB) => ({ terminalA, ...(terminalB ? { terminalB } : {}) });
@@ -86,6 +86,56 @@ test("parallel transformer allocation respects rating and Z percent on a common 
   d.items.t1 = transformer(100, 20); d.items.t2 = transformer(400, 40);
   const r = calculate(d);
   close(forItem(r, "t1")[0].activeMW, 2 / 3); close(forItem(r, "t2")[0].activeMW, 4 / 3);
+  const m = measurements(d, { t1: { voltageSecondaryKV: 13.8 }, t2: { voltageSecondaryKV: 13.8 } });
+  applyTransformerFlowMeasurements(createSwitchingStudy(d).network(), m, r);
+  close(m.get("t1").activeMW, 2 / 3); close(m.get("t2").activeMW, 4 / 3);
+  assert.equal(m.get("t1").powerIndeterminate, false);
+});
+test("an unknown radial transformer animates its load balance in existing, copied and future diagrams", () => {
+  const d = radial();
+  d.items.tie = { type: "transformer", x: 600, y: 100, topology: binding("a", "b"),
+    electrical: { impedancePercent: null, ratedMVA: 2 } };
+  for (const metadata of [undefined, { showMeasurements: false }, { nominalTransformerBalances: false }]) {
+    d.reconstruction = metadata;
+    const r = calculate(d);
+    close(forItem(r, "tie")[0].activeMW, 2); close(forItem(r, "tie")[0].reactiveMvar, 1);
+    assert.equal(r.invalidItems.size, 0); assert.equal(r.ambiguousItems.size, 0);
+    assert.ok(r.pendingImpedanceItems.has("tie"));
+    const m = measurements(d, { tie: { voltageSecondaryKV: 4.16 } });
+    applyTransformerFlowMeasurements(createSwitchingStudy(d).network(), m, r);
+    close(m.get("tie").activeMW, 2); close(m.get("tie").reactiveMvar, 1);
+    close(m.get("tie").currentA, Math.sqrt(5) * 1000 / (Math.sqrt(3) * 4.16));
+    assert.equal(d.items.tie.electrical.impedancePercent, null);
+  }
+});
+test("missing line impedance also permits unique radial training flows", () => {
+  const d = radial();
+  d.items.tie = { type: "line", x1: 500, y1: 100, x2: 700, y2: 100,
+    electrical: { resistanceOhm: null, reactanceOhm: null }, topology: binding("a", "b") };
+  const r = calculate(d); close(forItem(r, "tie")[0].activeMW, 2);
+  assert.ok(r.pendingImpedanceItems.has("tie")); assert.equal(r.invalidItems.size, 0);
+});
+test("an unknown parallel path suppresses only unresolved splits and opening its other leg restores flow", () => {
+  const d = radial();
+  d.items.tf = { type: "transformer", x: 600, y: 400, electrical: { impedancePercent: null }, topology: binding("a", "b") };
+  const r = calculate(d);
+  assert.equal(forItem(r, "tie").length, 0); assert.equal(forItem(r, "tf").length, 0);
+  assert.ok(r.ambiguousItems.has("tf")); assert.equal(r.invalidItems.size, 0);
+  assert.ok(forItem(r, "a").some(s => Math.abs(s.activeMW - 2) < 1e-6));
+  assert.ok(forItem(r, "b").some(s => Math.abs(s.activeMW - 2) < 1e-6));
+  d.items.tie.state = "open";
+  const radialFlow = calculate(d); close(forItem(radialFlow, "tf")[0].activeMW, 2);
+  assert.equal(radialFlow.ambiguousItems.size, 0);
+});
+test("invalid negative impedance remains blocked rather than being treated as pending", () => {
+  const d = radial();
+  d.items.tie = { type: "transformer", x: 600, y: 100, electrical: { impedancePercent: -1 }, topology: binding("a", "b") };
+  const r = calculate(d); assert.equal(r.segments.length, 0); assert.ok(r.invalidItems.has("tie"));
+});
+test("a blank forced current does not fix a utility's interchange at zero", () => {
+  const d = radial(); d.items.grid.electrical = { forcedCurrentA: null };
+  const r = calculate(d, { grid: { activeMW: 0, reactiveMvar: 0 } });
+  close(forItem(r, "tie")[0].activeMW, 2); assert.equal(r.unbalancedIslands, 0);
 });
 test("new measured powers update the flow without changing the input diagram or measurements", () => {
   const d = radial(), before = JSON.stringify(d), m = measurements(d, { load: { activeMW: 4 }, grid: { activeMW: 4 } });
@@ -176,3 +226,4 @@ test("P and Q filters remove their own channel and zero power has no arrows", ()
   h.update({ segments: [{ ...segment, activeMW: 0, reactiveMvar: 0 }] });
   assert.equal(h.arrows().length, 0); assert.equal(h.frames.size, 0);
 });
+

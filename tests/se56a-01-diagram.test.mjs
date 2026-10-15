@@ -6,7 +6,8 @@ import {SE56A01_ID} from '../src/se56a-01-diagram.js';
 import {createSwitchingStudy} from '../src/switching-analysis.js';
 import {buildStudyNetwork} from '../src/study-network.js';
 import {calculateThreePhaseFault} from '../src/electrical-studies.js';
-import {referenceReadouts,transformerNameplate,electricalFieldValue,applyReferenceTransformerBalances} from '../src/reference-diagrams.js';
+import {referenceReadouts,transformerNameplate,electricalFieldValue} from '../src/reference-diagrams.js';
+import {calculateAnimatedFlow,applyTransformerFlowMeasurements} from '../src/flow-animation.js';
 
 // Exercise the actual training calculation used by the page, including its
 // topology and transformer allocation, without booting Firebase or the UI.
@@ -18,7 +19,8 @@ function trainingResults(diagram) {
  const results=new Function('diagram',geometry+engine+projection+'\nreturn calculateElectricalState();')(diagram);
  const study=createSwitchingStudy(diagram),live=study.energizedItems();
  for(const [id,r]of results)if(!live.has(id))Object.assign(r,{energized:false,activeMW:0,reactiveMvar:0,currentA:0,voltageKV:0});
- return applyReferenceTransformerBalances(diagram,results,study.network());
+ const network=study.network();
+ return applyTransformerFlowMeasurements(network,results,calculateAnimatedFlow(network,results));
 }
 
 test('ideal training sources retain 230/13.8/4.16 kV and consistent load currents',()=>{
@@ -43,9 +45,29 @@ test('native branch balances respect crossings, cascaded transformers and open 6
   assert.ok(t.loadingPercent<100);assert.equal(t.connectedBothSides,true);
  }
  const network=createSwitchingStudy(d).network({'abb-dj-secondary-b':'closed'});
- applyReferenceTransformerBalances(d,r,network);
+ applyTransformerFlowMeasurements(network,r,calculateAnimatedFlow(network,r));
  assert.equal(r.get('abb-tf-a').powerIndeterminate,true);assert.equal(r.get('abb-tf-b').powerIndeterminate,true);
  assert.equal(r.get('abb-tf-c').powerIndeterminate,false);
+});
+
+test('the photographed model animates both powers without a layout-specific engine and stops at open contacts',()=>{
+ const d=bundledDiagram(SE56A01_ID),readings=trainingResults(d),study=createSwitchingStudy(d);
+ const flow=calculateAnimatedFlow(study.network(),readings),item=id=>flow.segments.find(s=>s.itemId===id);
+ assert.ok(flow.segments.length>100);assert.equal(flow.invalidItems.size,0);assert.equal(flow.ambiguousItems.size,0);
+ assert.equal(item('abb-tf-a').activeMW,16.74);assert.equal(item('abb-tf-d').activeMW,60);
+ assert.equal(item('abb-dist-tf-01').activeMW,1.86);assert.ok(item('abb-dist-tf-01').reactiveMvar>.73);
+ assert.equal(item('abb-dj-secondary-b'),undefined);assert.equal(item('abb-dj-52al'),undefined);
+ delete d.reconstruction;
+ assert.deepEqual(calculateAnimatedFlow(createSwitchingStudy(d).network(),readings).segments,flow.segments);
+ const states={'abb-dj-tf-d':'open'},live=study.energizedItems(states);
+ const dead=new Map([...readings].map(([id,r])=>[id,{...r,energized:live.has(id)}]));
+ const opened=calculateAnimatedFlow(study.network(states),dead);
+ assert.equal(opened.segments.some(s=>s.itemId==='abb-tf-d'),false);
+ assert.equal(opened.segments.some(s=>s.itemId==='abb-dj-tf-d'),false);
+ assert.equal(opened.segments.find(s=>s.itemId==='abb-tf-b').activeMW,60);
+ const both=calculateAnimatedFlow(study.network({'abb-dj-52al':'closed'}),readings);
+ assert.ok(both.ambiguousItems.has('abb-dj-52al'));assert.ok(both.ambiguousItems.has('abb-dj-52al2'));
+ assert.equal(both.segments.find(s=>s.itemId==='abb-tf-d').activeMW,60);
 });
 
 test('the photographed screen has 45 contacts, 13 transformers and explicit native connections',()=>{

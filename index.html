@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5.2</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.5.3</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -2599,7 +2599,7 @@
         onValue,
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
       import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.5.2";
-      import { transformerNameplate, referenceReadouts, electricalFieldValue, applyReferenceTransformerBalances } from "./src/reference-diagrams.js?v=49.5.2";
+      import { transformerNameplate, referenceReadouts, electricalFieldValue } from "./src/reference-diagrams.js?v=49.5.3";
       import { diagramDeletionUpdates, diagramRestorationUpdates } from "./src/diagram-lifecycle.js?v=49.4";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
@@ -2613,7 +2613,7 @@
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=49.2";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
-      import { calculateAnimatedFlow, createFlowAnimator } from "./src/flow-animation.js?v=49.2";
+      import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.5.3";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -5184,7 +5184,7 @@
               o.description,
             ),
           );
-        if ($("#showNameplates").checked && (!diagram.reconstruction || diagram.reconstruction.showNameplates)) {
+        if ($("#showNameplates").checked) {
           const e = electricalData(o);
           let rating = o.type === "transformer" ? transformerNameplate(o, e) :
             o.type === "utility" ? "Rede · " + e.nominalKV + " kV" :
@@ -5830,16 +5830,16 @@
               "frequencyHz", "currentA", "activeMW", "reactiveMvar", "loadingPercent",
               "overfluxPercent"]) result[field] = 0;
           }
-        applyReferenceTransformerBalances(diagram, electricalResults, study.network());
-        const animatedFlow = flowAnimationEnabled
-          ? calculateAnimatedFlow(study.network(), electricalResults, { electricalData })
-          : null;
+        const simulationNetwork = study.network(),
+          powerFlows = calculateAnimatedFlow(simulationNetwork, electricalResults, { electricalData });
+        applyTransformerFlowMeasurements(simulationNetwork, electricalResults, powerFlows, { electricalData });
+        const animatedFlow = flowAnimationEnabled ? powerFlows : null;
         diagram = viewDiagram;
         monitorTransformerOverload(evaluateAlarm);
         monitorTransformerOverflux(evaluateAlarm);
         monitorGeneratorOverload(evaluateAlarm);
         if (eng) renderInstrumentLinks(stage, diagram, selectedIds, E);
-        const diagramReadouts = diagram.reconstruction?.showMeasurements ? referenceReadouts(diagram, electricalResults, study.network()) : new Map();
+        const diagramReadouts = referenceReadouts(diagram, electricalResults, simulationNetwork);
         const list = Object.entries(diagram.items || {});
         $("#empty").hidden = !!list.length;
         $("#empty").textContent = eng && !currentDiagramId ? "Nenhuma aba ativa. Abra Diagramas para criar ou restaurar uma aba." : "Nenhum diagrama publicado";
@@ -5994,7 +5994,7 @@
           if (eng && isElectrical(o))
             for (const p of terminals(o))
               g.append(E("circle", { cx: p.x, cy: p.y, r: 5, class: "port" }));
-          if (!diagram.reconstruction || (diagram.reconstruction.showMeasurements && o.reconstruction?.showMeasurements === true) || studyOverlay?.values.has(k)) addMeasurement(g, k, o);
+          if (o.reconstruction?.showMeasurements !== false || $("#dataBlockResults").value === "full" || studyOverlay?.values.has(k)) addMeasurement(g, k, o);
           g.onpointerdown = (e) => {
             if (eng) down(e, k);
           };
@@ -6012,12 +6012,15 @@
         $("#flowAnimationOptions").hidden = !flowAnimationEnabled;
         const notice = $("#flowAnimationNotice");
         const invalid = [...(animatedFlow?.invalidItems || [])].some((id) => diagram.items[id]),
-          ambiguous = [...(animatedFlow?.ambiguousItems || [])].some((id) => diagram.items[id]);
+          ambiguous = [...(animatedFlow?.ambiguousItems || [])].some((id) => diagram.items[id]),
+          pendingImpedance = [...(animatedFlow?.pendingImpedanceItems || [])].some((id) => diagram.items[id]);
         notice.textContent = invalid
           ? "Dados ou balanço de potência a verificar nesta tela."
           : ambiguous
-            ? "Sentido indefinido nos trechos do anel sem impedância."
-            : !visibleSegments.length ? "Sem transferência de potência nesta tela." : "";
+            ? "Sentido indefinido nos trechos em paralelo sem dados suficientes."
+            : !simulationNetwork.sources.length ? "Sem fonte em serviço. Configure a alimentação e as cargas do modelo."
+            : !visibleSegments.length ? "Sem transferência de potência nesta tela."
+            : pendingImpedance ? "Fluxo nominal de treinamento; impedâncias pendentes." : "";
         notice.hidden = !flowAnimationEnabled || !notice.textContent;
         addConductorGroupLabels();
         monitorProtected(live, evaluateAlarm && !skipSupplyAlarms);
