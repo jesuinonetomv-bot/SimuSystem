@@ -27,7 +27,10 @@ export function renderTechnicalSymbol(g, o, E) {
   const inner = E("g", { transform: `translate(${o.x} ${o.y}) rotate(${r}) scale(${z})`, class: "technical-symbol" });
   const line = (x1, y1, x2, y2) => inner.append(E("line", { x1, y1, x2, y2, class: "wire" }));
   const text = (x, y, value) => inner.append(E("text", { x, y, class: "symbol-letter", "text-anchor": "middle" }, value));
-  if (o.type === "breaker") {
+  if (["breaker", "disconnector"].includes(o.type) && o.symbolStyle === "hmi") {
+    line(0, -22, 0, -21.25); line(0, 21.25, 0, 22);
+    inner.append(E("rect", { x: -22.5, y: -21.25, width: 45, height: 42.5, class: "tech-shape tech-breaker hmi-switch" }));
+  } else if (o.type === "breaker") {
     line(0, -22, 0, -8); line(0, 8, 0, 22);
     inner.append(E("rect", { x: -8, y: -8, width: 16, height: 16, class: "tech-shape tech-breaker" }));
     if (o.state !== "closed") line(-5, 5, 5, -5);
@@ -92,3 +95,4 @@ export function renderTechnicalSymbol(g, o, E) {
   g.append(inner);
   return true;
 }
+

@@ -1330,6 +1330,12 @@
         .diagram-manager-grid { grid-template-columns: 1fr; }
         .diagram-list { max-height: 190px; border-right: 0; border-bottom: 1px solid #d2dadd; padding: 0 0 10px; }
       }
+      .diagram-review-note { padding: 9px 16px; background: #fff3d4; color: #654b12; font-size: 13px; border-bottom: 1px solid #dfca8d; }
+      .reference-layout { background: #d7d7d7 !important; }
+      .reference-layout .item .wire, .reference-layout .item .bus { stroke: #101820 !important; }
+      .reference-layout .item.closed .hmi-switch { fill: #f00000 !important; stroke: #152026 !important; }
+      .reference-layout .item.open .hmi-switch { fill: #008000 !important; stroke: #152026 !important; }
+      .reference-layout .item .tech-shape:not(.hmi-switch) { fill: #d7d7d7; stroke: #101820; }
     </style>
     <link rel="stylesheet" href="./src/workbench.css?v=49.2" />
   </head>
@@ -1364,8 +1370,9 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.3</span>
     </nav>
+    <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
       <aside class="side ribbon">
         <div class="ribbon-tabs">
@@ -2565,13 +2572,14 @@
         remove,
         onValue,
       } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+      import { withBundledDiagrams, bundledDiagram, restoreUnknownElectricalFields } from "./src/bundled-diagrams.js?v=49.3";
       import { TimeSeriesEngine } from "./src/simulation-clock.js";
       import { GridDynamics } from "./src/grid-dynamics.js";
       import { attachLoadFlowWorkbench } from "./src/load-flow-workbench.js?v=49.2";
       import { attachThemeEditor } from "./src/display-theme.js?v=49.2";
       import { EQUIPMENT_CATALOG, createEquipment, equipmentDefaults, cableEquivalent, isCatalogEquipment, isInstrument, remapInstrumentLinks, instrumentReadout, instrumentLinkIssues } from "./src/equipment-library.js?v=49.2";
       import { attachComponentEditor } from "./src/component-editor.js?v=49.2";
-      import { renderTechnicalSymbol, renderInstrumentLinks } from "./src/technical-symbols.js?v=49.2";
+      import { renderTechnicalSymbol, renderInstrumentLinks } from "./src/technical-symbols.js?v=49.3";
       import { attachStudyWorkbench } from "./src/study-workbench.js?v=49.2";
       import { attachSequenceFields } from "./src/sequence-fields.js?v=49.2";
       import { createSwitchingStudy } from "./src/switching-analysis.js?v=49.2";
@@ -2665,7 +2673,7 @@
           data.controlRules = Object.values(data.controlRules || {});
         if (!data.conductorGroups || typeof data.conductorGroups !== "object")
           data.conductorGroups = {};
-        return data;
+        return restoreUnknownElectricalFields(data);
       };
       const cleanDiagram = (value = diagram) => normalizeDiagram(value);
       function diagramMetadata(id, data = diagram, extra = {}) {
@@ -2716,7 +2724,7 @@
           button.innerHTML = "<strong></strong><small></small>";
           button.querySelector("strong").textContent = meta.name || "Diagrama sem nome";
           button.querySelector("small").textContent =
-            (meta.publishedAt ? "Publicado" : "Somente rascunho") +
+            (meta.publishedAt ? "Publicado" : meta.bundled ? "Disponível no site · revisar dados" : "Somente rascunho") +
             (meta.operatorVisible === false ? " · Oculto para operador" : "") +
             (meta.description ? " — " + meta.description : "");
           button.onclick = async () => {
@@ -2733,7 +2741,7 @@
       async function ensureDiagramCatalog() {
         const catalogSnapshot = await get(ref(db, "engineering/diagramCatalog"));
         if (catalogSnapshot.exists()) {
-          diagramCatalog = catalogSnapshot.val() || {};
+          diagramCatalog = withBundledDiagrams(catalogSnapshot.val() || {});
           if (!diagramCatalog[currentDiagramId])
             currentDiagramId = Object.keys(diagramCatalog)[0] || "principal";
           renderDiagramCatalog();
@@ -2752,7 +2760,7 @@
           name: draft.name || "Diagrama principal",
           publishedAt: legacyPublished.val()?.publishedAt || null,
         });
-        diagramCatalog = { principal: meta };
+        diagramCatalog = withBundledDiagrams({ principal: meta });
         currentDiagramId = "principal";
         await Promise.all([
           set(ref(db, draftPath("principal")), cleanDiagram(draft)),
@@ -2782,6 +2790,7 @@
               }),
             };
         }
+        diagramCatalog = withBundledDiagrams(diagramCatalog);
         const visibleIds = Object.keys(diagramCatalog).filter(
           (id) => diagramCatalog[id]?.operatorVisible !== false,
         );
@@ -2875,7 +2884,7 @@
             ? normalizeDiagram(draftSnapshot.val())
             : publishedSnapshot.exists()
               ? normalizeDiagram(publishedSnapshot.val())
-              : { name: diagramCatalog[id].name, items: {}, controlRules: [] };
+              : bundledDiagram(id) || { name: diagramCatalog[id].name, items: {}, controlRules: [] };
           operatorDiagramStates.set(id, cleanDiagram(diagram));
           resetDiagramWorkspace();
           $("#status").textContent = "Diagrama aberto na engenharia: " + diagramCatalog[id].name;
@@ -2901,7 +2910,7 @@
             const saved = operatorSession ? operatorDiagramState(id) : null;
             if (saved) diagram = saved;
             else if (snapshot.exists()) diagram = normalizeDiagram(snapshot.val());
-            else diagram = { name: diagramCatalog[id]?.name || "Diagrama", items: {} };
+            else diagram = bundledDiagram(id) || { name: diagramCatalog[id]?.name || "Diagrama", items: {} };
             resetControlRuleRuntime();
             if (operatorSession) applyScenarioSimulation();
             else {
@@ -5023,6 +5032,7 @@
         return best;
       }
       function addLabels(g, o, x, y, distance = 30) {
+        if (o.reconstruction?.hideLabel) return;
         const pos = o.labelPosition || "above",
           fs = +(o.fontSize || 12),
           v = {
@@ -5036,7 +5046,7 @@
         g.append(
           E(
             "text",
-            { x: tx, y: ty, class: "tag", "font-size": fs },
+            { x: tx, y: ty, class: "tag", "font-size": fs, ...(o.reconstruction?.tagColor ? { style: "fill:" + o.reconstruction.tagColor } : {}) },
             o.name || "",
           ),
         );
@@ -5054,7 +5064,7 @@
               o.description,
             ),
           );
-        if ($("#showNameplates").checked) {
+        if ($("#showNameplates").checked && !diagram.reconstruction) {
           const e = electricalData(o);
           let rating = o.type === "transformer" ? e.ratedMVA + " MVA · " + e.primaryKV + "/" + e.secondaryKV + " kV" :
             o.type === "utility" ? "Rede · " + e.nominalKV + " kV" :
@@ -5679,6 +5689,8 @@
         }
       }
       function draw(evaluateAlarm = false, skipSupplyAlarms = false) {
+        stage.classList.toggle("reference-layout", !!diagram.reconstruction);
+        $("#diagramReviewNotice").hidden = !diagram.reconstruction;
         stage.innerHTML = "";
         const viewDiagram = diagram,
           globalDiagram = globalSimulationDiagram();
@@ -5766,7 +5778,8 @@
                 rx: 6,
                 class: "annotation-area",
                 stroke: o.color || "#43807a",
-                fill: (o.color || "#43807a") + "22",
+                fill: o.reconstruction?.fill || (o.color || "#43807a") + "22",
+                ...(o.reconstruction?.fill ? { style: "fill:" + o.reconstruction.fill + ";stroke:#aeb6bc;stroke-width:2;stroke-dasharray:none" } : {}),
               }),
             );
             if (o.name)
@@ -5802,6 +5815,7 @@
                   class: "annotation-text",
                   "font-size": o.fontSize || 18,
                   fill: o.color || "#24323d",
+                  ...(o.reconstruction ? { style: "fill:" + (o.color || "#24323d") } : {}),
                   transform:
                     "rotate(" + (o.rotation || 0) + " " + o.x + " " + o.y + ")",
                 },
@@ -5854,7 +5868,7 @@
           if (eng && isElectrical(o))
             for (const p of terminals(o))
               g.append(E("circle", { cx: p.x, cy: p.y, r: 5, class: "port" }));
-          addMeasurement(g, k, o);
+          if (!diagram.reconstruction) addMeasurement(g, k, o);
           g.onpointerdown = (e) => {
             if (eng) down(e, k);
           };
@@ -8512,6 +8526,7 @@
             else {
               const p = await get(ref(db, publishedPath()));
               if (p.exists()) diagram = normalizeDiagram(p.val());
+              else diagram = bundledDiagram(currentDiagramId) || { name: diagramCatalog[currentDiagramId]?.name || "Diagrama", items: {} };
             }
             await loadEngineeringDiagramStates();
             resetDiagramWorkspace();
@@ -8693,3 +8708,4 @@
     </script>
   </body>
 </html>
+
