@@ -1332,10 +1332,10 @@
       }
       .diagram-review-note { padding: 9px 16px; background: #fff3d4; color: #654b12; font-size: 13px; border-bottom: 1px solid #dfca8d; }
       .reference-layout { background: #d7d7d7 !important; }
-      .reference-layout .item .wire, .reference-layout .item .bus { stroke: #101820 !important; }
+      #stage.reference-layout .item:not(.selected):not(.overload):not(.study-warning):not(.study-critical):not(.maintenance) { --equipment-color: #101820; --contact-color: #101820; }
       .reference-layout .item.closed .hmi-switch { fill: #f00000 !important; stroke: #152026 !important; }
       .reference-layout .item.open .hmi-switch { fill: #008000 !important; stroke: #152026 !important; }
-      .reference-layout .item .tech-shape:not(.hmi-switch) { fill: #d7d7d7; stroke: #101820; }
+      #stage.reference-layout .item .tech-shape:not(.hmi-switch) { fill: #d7d7d7; }
     </style>
     <link rel="stylesheet" href="./src/workbench.css?v=49.2" />
   </head>
@@ -1370,7 +1370,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.3</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.3.1</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
