@@ -178,3 +178,27 @@ test('physical bus flows start at the serving incomer and stop at the last conne
   assert.ok((incoming.to.x-incoming.from.x)*incoming.activeMW>0,'incoming breaker and adjacent wires agree');
  }
 });
+
+test('parallel incomers and transformer transfers keep moving arrows without making pending powers definite',()=>{
+ const d=bundledDiagram(SE56A01_ID),readings=trainingResults(d),study=createSwitchingStudy(d);
+ const switched=states=>{
+  const live=study.energizedItems(states);
+  return calculateAnimatedFlow(study.network(states),new Map([...readings].map(([id,r])=>[id,{...r,energized:live.has(id)}])));
+ };
+ const both=switched({'abb-dj-52al':'closed'});
+ for(const id of ['abb-dj-52al','abb-dj-52al2']){
+  const s=both.illustrativeSegments.find(s=>s.itemId===id);
+  assert.ok(s,'both incomers retain visible animated flow');
+  assert.ok((s.to.x-s.from.x)*s.activeMW>0,'incoming arrows follow the adjacent wires');
+ }
+ const shared=switched({'abb-dj-secondary-b':'closed'});
+ for(const id of ['abb-tf-a','abb-tf-b']){
+  assert.ok(shared.illustrativeSegments.some(s=>s.itemId===id));
+  assert.ok(shared.ambiguousItems.has(id));
+ }
+ for(const s of [...both.segments,...both.illustrativeSegments,...shared.segments,...shared.illustrativeSegments]
+   .filter(s=>s.itemId==='abb-barra-230')){
+  assert.ok(Math.min(s.from.x,s.to.x)>=d.items['abb-tf-d'].x-1e-6,'no flow from an empty bus tail');
+  assert.ok(Math.max(s.from.x,s.to.x)<=d.items['abb-tf-c'].x+1e-6,'no flow beyond the last takeoff');
+ }
+});

@@ -1,6 +1,7 @@
 // Lossless P/Q allocation for the training display, using the simulator's
 // measured injections and switching graph. This is not the AC study solver.
-// Ideal cycles have no unique allocation: display only their bridge flows.
+// Unresolved cycles use a separate topology-only illustration; those arrows
+// never become transformer readings or numerical electrical-study results.
 export const FLOW_EPSILON = 1e-4;
 const finite = (value) => value !== null && value !== "" && Number.isFinite(Number(value));
 const number = (value) => finite(value) ? Number(value) : 0;
@@ -102,6 +103,32 @@ function solveAllocation(nodes, edges, injections) {
   return new Map([[nodes[0], 0], ...nodes.slice(1).map((n, i) => [n, x[i]])]);
 }
 
+// Unit graph weights choose a balanced illustration when impedances do not
+// determine the real split. Work on residual components so already determined
+// branch powers remain unchanged. No electrical input is filled or persisted.
+function illustrativeAllocation(nodes, edges, injections) {
+  const groups = disjointSet(nodes), regions = new Map(), result = new Map();
+  for (const e of edges) groups.join(e.a, e.b);
+  for (const n of nodes) {
+    const root = groups.root(n);
+    if (!regions.has(root)) regions.set(root, []);
+    regions.get(root).push(n);
+  }
+  for (const [root, region] of regions) {
+    const links = edges.filter(e => groups.root(e.a) === root).map(e => ({ ...e, weight: 1 }));
+    if (!links.length) continue;
+    const pInput = new Map(region.map(n => [n, injections.get(n).p]));
+    const qInput = new Map(region.map(n => [n, injections.get(n).q]));
+    const balanced = input => Math.abs([...input.values()].reduce((a, b) => a + b, 0))
+      <= Math.max(1e-7, [...input.values()].reduce((sum, value) => sum + Math.abs(value), 0) * 1e-7);
+    if (!balanced(pInput) || !balanced(qInput)) continue;
+    const p = solveAllocation(region, links, pInput), q = solveAllocation(region, links, qInput);
+    if (!p || !q) continue;
+    for (const e of links) result.set(e.key, { p: p.get(e.a) - p.get(e.b), q: q.get(e.a) - q.get(e.b) });
+  }
+  return result;
+}
+
 export function calculateAnimatedFlow(network, measurements, { electricalData = (o) => o.electrical || {} } = {}) {
   const { items, points, ports, sources } = network;
   const contact = disjointSet([...points.keys()]);
@@ -154,8 +181,19 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
   }
   const adjacency = new Map(nodes.map((n) => [n, []]));
   for (const e of edges) { adjacency.get(e.a).push(e); adjacency.get(e.b).push(e); }
-  const seen = new Set(), segments = [], ambiguousItems = new Set(), ambiguousKeys = new Set();
+  const seen = new Set(), segments = [], illustrativeSegments = [], ambiguousItems = new Set(), ambiguousKeys = new Set();
   const markUnresolved = e => { ambiguousItems.add(e.id); ambiguousKeys.add(e.key); };
+  const illustrate = (region, links, residual) => {
+    if (!links.some(e => ambiguousKeys.has(e.key))) return;
+    const allocation = illustrativeAllocation(region, links, residual);
+    for (const e of links) {
+      const flow = allocation.get(e.key);
+      if (!ambiguousKeys.has(e.key) || !flow || !measurements.get(e.id)?.energized) continue;
+      if (Math.max(Math.abs(flow.p), Math.abs(flow.q)) < FLOW_EPSILON) continue;
+      illustrativeSegments.push({ key: e.key, itemId: e.id, from: { ...e.from }, to: { ...e.to },
+        activeMW: flow.p, reactiveMvar: flow.q, illustrative: true });
+    }
+  };
   let unbalancedIslands = 0;
   for (const seed of nodes) {
     if (seen.has(seed)) continue;
@@ -189,8 +227,7 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
     const unique = bridgeFlows(region, adjacency, injection, () => true, unfixed);
     const unresolved = unresolvedCycleEdges(region, adjacency);
 
-    // Unknown impedances cannot determine a mesh split. Its upstream/downstream
-    // bridge flows still follow KCL; suppress only the unresolved paths.
+    // Keep determined powers separate from the illustrative source sharing.
     if (unfixedCount > 1) {
       for (const e of islandEdges) {
         const flow = unique.get(e.key);
@@ -200,6 +237,7 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
         if (Math.max(Math.abs(flow.p), Math.abs(flow.q)) < FLOW_EPSILON || !measurements.get(e.id)?.energized) continue;
         segments.push({ key: e.key, itemId: e.id, from: { ...e.from }, to: { ...e.to }, activeMW: flow.p, reactiveMvar: flow.q });
       }
+      illustrate(region, islandEdges, injection);
       continue;
     }
 
@@ -234,12 +272,9 @@ export function calculateAnimatedFlow(network, measurements, { electricalData = 
       segments.push({ key: e.key, itemId: e.id, from: { ...e.from }, to: { ...e.to },
         activeMW: flow.p, reactiveMvar: flow.q });
     }
+    illustrate(region, islandEdges.filter(e => e.ideal || unresolved.has(e.key)), residual);
   }
-  // Neutral, stationary marks keep unresolved parallel paths visible without
-  // inventing an impedance, numerical share or direction.
-  const ambiguousSegments = edges.filter(e => ambiguousKeys.has(e.key) && measurements.get(e.id)?.energized)
-    .map(e => ({ key: e.key, itemId: e.id, from: { ...e.from }, to: { ...e.to } }));
-  return { segments, ambiguousSegments, ambiguousItems, invalidItems, pendingImpedanceItems, unbalancedIslands };
+  return { segments, illustrativeSegments, ambiguousItems, invalidItems, pendingImpedanceItems, unbalancedIslands };
 }
 
 // Every diagram uses the same terminal graph for transformer measurements and
@@ -310,9 +345,9 @@ export function createFlowAnimator({ stage, page = stage.ownerDocument, ownerWin
   page.addEventListener("visibilitychange", refresh);
   reduced?.addEventListener?.("change", refresh);
   return {
-    update({ segments = [], ambiguousSegments = [], enabled = false, showActive = true, showReactive = true } = {}) {
+    update({ segments = [], illustrativeSegments = [], enabled = false, showActive = true, showReactive = true } = {}) {
       const existing = new Map(arrows.map((arrow) => [arrow.key, arrow])), next = [];
-      if (enabled) for (const segment of segments) {
+      if (enabled) for (const segment of [...segments, ...illustrativeSegments]) {
         const length = Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
         if (length < 14 || !Number.isFinite(length)) continue;
         for (const quantity of ["p", "q"]) {
@@ -330,23 +365,14 @@ export function createFlowAnimator({ stage, page = stage.ownerDocument, ownerWin
             arrow.node.setAttribute("data-item-id", segment.itemId);
             arrow.node.setAttribute("data-quantity", quantity);
             arrow.node.setAttribute("data-direction", value < 0 ? "reverse" : "forward");
+            arrow.node.setAttribute("data-flow-model", segment.illustrative ? "illustrative" : "calculated");
             layer.append(arrow.node); next.push(arrow);
           }
         }
       }
       for (const arrow of existing.values()) arrow.node.remove();
       arrows = next;
-      for (const node of [...layer.children]) if (node.getAttribute?.("class") === "flow-uncertain") node.remove();
-      if (enabled) for (const segment of ambiguousSegments) {
-        const length = Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
-        if (length < 14) continue;
-        const mark = element("line", { class: "flow-uncertain", "data-item-id": segment.itemId,
-          x1: segment.from.x, y1: segment.from.y, x2: segment.to.x, y2: segment.to.y,
-          stroke: "#985b00", "stroke-width": 3, "stroke-dasharray": "5 5", opacity: .9 });
-        const title = element("title", {}); title.textContent = "Paralelo: potência e sentido indeterminados; informe as impedâncias.";
-        mark.append(title); layer.append(mark);
-      }
-      if (arrows.length || enabled && ambiguousSegments.length) stage.append(layer); else layer.remove();
+      if (arrows.length) stage.append(layer); else layer.remove();
       refresh();
     },
     dispose() {

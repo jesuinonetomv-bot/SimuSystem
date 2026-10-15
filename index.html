@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6.1</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -2613,7 +2613,7 @@
       import { createSwitchingStudy, electricalTerminals } from "./src/switching-analysis.js?v=49.6";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
-      import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.6";
+      import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.6.1";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -5952,7 +5952,7 @@
           .filter((segment) => diagram.items[segment.itemId]);
         flowAnimator.update({
           segments: visibleSegments,
-          ambiguousSegments: (animatedFlow?.ambiguousSegments || []).filter(segment => diagram.items[segment.itemId]),
+          illustrativeSegments: (animatedFlow?.illustrativeSegments || []).filter(segment => diagram.items[segment.itemId]),
           enabled: flowAnimationEnabled,
           showActive: $("#flowShowActive").checked,
           showReactive: $("#flowShowReactive").checked,
@@ -5966,7 +5966,7 @@
         notice.textContent = invalid
           ? "Dados ou balanço de potência a verificar nesta tela."
           : ambiguous
-            ? "Trechos tracejados: divisão e sentido em paralelo pendentes dos dados elétricos."
+            ? "Setas ilustrativas nos paralelos; divisão real depende das impedâncias e da contribuição das fontes."
             : !simulationNetwork.sources.length ? "Sem fonte em serviço. Configure a alimentação e as cargas do modelo."
             : !visibleSegments.length ? "Sem transferência de potência nesta tela."
             : pendingImpedance ? "Fluxo nominal de treinamento; impedâncias pendentes." : "";

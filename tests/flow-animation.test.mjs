@@ -21,6 +21,7 @@ function measurements(diagram, values = {}) {
 }
 const calculate = (d, values = {}) => calculateAnimatedFlow(createSwitchingStudy(d).network(), measurements(d, values));
 const forItem = (result, id) => result.segments.filter((s) => s.itemId === id);
+const illustrationFor = (result, id) => result.illustrativeSegments.filter((s) => s.itemId === id);
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-6, `${a} != ${b}`);
 
 test("a closed radial feeder carries its load's active and reactive powers", () => {
@@ -58,12 +59,16 @@ test("a capacitive load sends Q back to the source", () => {
   const r = calculate(radial(), { load: { reactiveMvar: -1 }, grid: { reactiveMvar: -1 } });
   close(forItem(r, "tie")[0].reactiveMvar, -1);
 });
-test("an ideal ring does not receive an invented split or direction", () => {
+test("an ideal ring animates balanced illustrative arrows without publishing a numerical split", () => {
   const d = radial(); d.items.other = { ...d.items.tie, x: 600, y: 400 };
   const r = calculate(d);
   assert.equal(forItem(r, "tie").length, 0); assert.equal(forItem(r, "other").length, 0);
   assert.ok(r.ambiguousItems.has("tie")); assert.ok(r.ambiguousItems.has("other"));
   assert.ok(r.segments.some((s) => s.itemId === "a" && s.activeMW === 2));
+  const first = illustrationFor(r, "tie")[0], second = illustrationFor(r, "other")[0];
+  assert.ok(first.illustrative && second.illustrative);
+  close(first.activeMW, 1); close(second.activeMW, 1);
+  close(first.reactiveMvar + second.reactiveMvar, 1);
 });
 test("opening one leg of an ideal ring restores a unique flow", () => {
   const d = radial(); d.items.other = { ...d.items.tie, x: 600, y: 400, state: "open" };
@@ -115,18 +120,39 @@ test("missing line impedance also permits unique radial training flows", () => {
   const r = calculate(d); close(forItem(r, "tie")[0].activeMW, 2);
   assert.ok(r.pendingImpedanceItems.has("tie")); assert.equal(r.invalidItems.size, 0);
 });
-test("an unknown parallel path suppresses only unresolved splits and opening its other leg restores flow", () => {
+test("an unknown parallel path stays animated while its numerical split remains pending", () => {
   const d = radial();
   d.items.tf = { type: "transformer", x: 600, y: 400, electrical: { impedancePercent: null }, topology: binding("a", "b") };
   const r = calculate(d);
   assert.equal(forItem(r, "tie").length, 0); assert.equal(forItem(r, "tf").length, 0);
   assert.ok(r.ambiguousItems.has("tf")); assert.equal(r.invalidItems.size, 0);
-  assert.ok(r.ambiguousSegments.some(s => s.itemId === "tf"));
+  assert.ok(illustrationFor(r, "tf")[0].activeMW > 0);
+  close(illustrationFor(r, "tf")[0].activeMW + illustrationFor(r, "tie")[0].activeMW, 2);
+  const readings = measurements(d, { tf: { voltageSecondaryKV: 4.16 } });
+  applyTransformerFlowMeasurements(createSwitchingStudy(d).network(), readings, r);
+  assert.equal(readings.get("tf").powerIndeterminate, true);
+  assert.equal(readings.get("tf").currentA, 0);
+  assert.equal(d.items.tf.electrical.impedancePercent, null);
   assert.ok(forItem(r, "a").some(s => Math.abs(s.activeMW - 2) < 1e-6));
   assert.ok(forItem(r, "b").some(s => Math.abs(s.activeMW - 2) < 1e-6));
   d.items.tie.state = "open";
   const radialFlow = calculate(d); close(forItem(radialFlow, "tf")[0].activeMW, 2);
   assert.equal(radialFlow.ambiguousItems.size, 0);
+  assert.equal(radialFlow.illustrativeSegments.length, 0);
+});
+test("illustrative parallel arrows reverse with generation, disappear without demand and never cross open contacts", () => {
+  const d = radial(); d.items.other = { ...d.items.tie, x: 600, y: 400 };
+  d.items.gen = { type: "turbogenerator", x: 1800, y: 1000, state: "running", isSource: true,
+    topology: binding("b") };
+  const before = JSON.stringify(d);
+  const reverse = calculate(d, { gen: { activeMW: 4, reactiveMvar: 0 }, grid: { activeMW: -2 } });
+  close(illustrationFor(reverse, "tie")[0].activeMW, -1);
+  close(illustrationFor(reverse, "other")[0].activeMW, -1);
+  assert.equal(JSON.stringify(d), before);
+  const idle = calculate(d, { gen: { activeMW: 2, reactiveMvar: 1 } });
+  assert.equal(idle.illustrativeSegments.length, 0);
+  d.items.tie.state = "open"; d.items.other.state = "open";
+  assert.equal(calculate(d).illustrativeSegments.length, 0);
 });
 test("an unresolved mesh does not erase a separate parallel group with known impedances", () => {
   const d = radial(); d.items.tf = { type: "transformer", x: 600, y: 400,
@@ -239,12 +265,18 @@ test("P and Q filters remove their own channel and zero power has no arrows", ()
   h.update({ segments: [{ ...segment, activeMW: 0, reactiveMvar: 0 }] });
   assert.equal(h.arrows().length, 0); assert.equal(h.frames.size, 0);
 });
-test("unresolved parallel paths remain visible as stationary neutral marks and clear when disabled", () => {
+test("illustrative parallel paths use moving P/Q arrows and clear when disabled", () => {
   const h = animationHarness();
-  h.update({ segments: [], ambiguousSegments: [segment] });
-  assert.equal(h.arrows().length, 1); assert.equal(h.arrows()[0].attributes.class, "flow-uncertain");
-  assert.equal(h.frames.size, 0);
-  h.update({ segments: [], ambiguousSegments: [segment] }); assert.equal(h.arrows().length, 1);
-  h.update({ enabled: false }); assert.equal(h.arrows().length, 0);
+  const illustrativeSegments = [{ ...segment, illustrative: true }];
+  h.update({ segments: [], illustrativeSegments });
+  assert.equal(h.arrows().length, 2); assert.equal(h.arrows()[0].tag, "polygon");
+  assert.equal(h.arrows()[0].attributes["data-flow-model"], "illustrative");
+  assert.equal(h.frames.size, 1);
+  const arrow = h.arrows()[0], initial = arrow.attributes.transform;
+  h.run(1000); assert.notEqual(arrow.attributes.transform, initial);
+  h.update({ segments: [], illustrativeSegments, showReactive: false });
+  assert.equal(h.arrows().length, 1); assert.equal(h.arrows()[0], arrow);
+  h.update({ enabled: false, illustrativeSegments });
+  assert.equal(h.arrows().length, 0); assert.equal(h.frames.size, 0);
 });
 
