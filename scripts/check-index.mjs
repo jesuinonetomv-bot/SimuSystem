@@ -12,7 +12,7 @@ new Script(withoutImports, { filename: "index.html" });
 for (const entry of code.matchAll(/from\s+["'](\.\/[^"']+)["']/g))
   assert.ok(existsSync(new URL(entry[1], root)), "Missing local import: " + entry[1]);
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
-for (const id of ["cmd", "cmdOk", "cmdText", "alarmBox", "alarmMessage", "logout", "viewSettingsBtn", "viewSettingsBox", "viewSettingsClose", "viewScenario", "opZoomOut", "opFit", "opZoomIn", "flowAnimationBtn", "flowShowActive", "flowShowReactive", "flowAnimationNotice", "workModel", "workOperation", "workStudies", "showModelNotice", "showNameplates", "dataBlockResults", "clearViewStudy"])
+for (const id of ["cmd", "cmdOk", "cmdText", "alarmBox", "alarmMessage", "logout", "viewSettingsBtn", "viewSettingsBox", "viewSettingsClose", "viewScenario", "opZoomOut", "opFit", "opZoomIn", "flowAnimationBtn", "flowShowActive", "flowShowReactive", "flowAnimationNotice", "workModel", "workOperation", "workStudies", "measurementPanelBtn", "showModelNotice", "showNameplates", "dataBlockResults", "clearViewStudy"])
   assert.equal(ids.filter((x) => x === id).length, 1, "Duplicate/missing ID: " + id);
 assert.ok(!ids.includes("switchingAnalysis"), "Operator faceplate must not show the internal study");
 const flowUI = readFileSync(new URL("src/load-flow-workbench.js", root), "utf8");
@@ -52,3 +52,6 @@ for (const id of ["fsPoint", "fsType", "fsPhases", "fsRun", "fsDiagram", "fsEven
   assert.equal(uiIds.filter(x => x === id).length, 1, "Duplicate/missing fault sequence ID: " + id);
 
 
+
+for (const file of ["measurement-panels.js", "measurement-panel-editor.js", "measurement-panels.css"])
+  assert.ok(sw.includes('"./src/' + file + '?v=49.7"'), "Missing measurement panel asset: " + file);

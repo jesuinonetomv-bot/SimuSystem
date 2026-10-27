@@ -1347,6 +1347,7 @@
       #diagramDelete, #diagramDeleteConfirm { background: #b8342b; color: #fff; }
     </style>
     <link rel="stylesheet" href="./src/workbench.css?v=49.2" />
+    <link rel="stylesheet" href="./src/measurement-panels.css?v=49.7" />
   </head>
   <body>
     <header>
@@ -1379,7 +1380,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6.3</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.7</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -1530,6 +1531,8 @@
                 ⚡ Dados elétricos</button
               ><button type="button" id="topologyBtn" hidden>
                 ⛓ Configurar conexões</button
+              ><button type="button" id="measurementPanelBtn" hidden>
+                ▤ Configurar painel</button
               ><button class="danger" id="remove">Excluir</button>
             </div>
           </div>
@@ -1558,6 +1561,7 @@
             <button class="tool" data-tool="vt"><b>TP</b>TP</button>
             <button class="tool" data-tool="cbct"><b>ΣI</b>TC toroidal</button>
             <button class="tool" data-tool="fuse"><b>▯</b>Fusível</button>
+            <button class="tool" data-tool="measurementPanel"><b>▤</b>Painel de leituras</button>
           </div>
           <div class="group">
             <span class="group-title">Instalação</span>
@@ -2608,6 +2612,8 @@
       import { attachThemeEditor } from "./src/display-theme.js?v=49.2";
       import { EQUIPMENT_CATALOG, createEquipment, equipmentDefaults, cableEquivalent, isCatalogEquipment, isInstrument, remapInstrumentLinks, instrumentReadout, instrumentLinkIssues } from "./src/equipment-library.js?v=49.2";
       import { attachComponentEditor } from "./src/component-editor.js?v=49.2";
+      import { createMeasurementContext, createMeasurementPanel, renderMeasurementPanel, panelBounds, measurementPanelFor, remapPanelLinks } from "./src/measurement-panels.js?v=49.7";
+      import { attachMeasurementPanelEditor } from "./src/measurement-panel-editor.js?v=49.7";
       import { renderTechnicalSymbol, renderInstrumentLinks } from "./src/technical-symbols.js?v=49.3";
       import { attachStudyWorkbench } from "./src/study-workbench.js?v=49.2";
       import { attachSequenceFields } from "./src/sequence-fields.js?v=49.2";
@@ -2639,6 +2645,7 @@
       $("#showModelNotice").checked = localStorage.getItem("simuModelNotice") === "1";
       $("#dataBlockResults").value = ["compact", "full", "off"].includes(localStorage.getItem("simuDataBlocks")) ? localStorage.getItem("simuDataBlocks") : "compact";
       let studyOverlay = null;
+      let circuitMeasurements = null;
       let electricalResults = new Map(),
         eng = false,
         guest = true,
@@ -5230,7 +5237,7 @@
                 item.topology.terminalB = prefix + item.topology.terminalB;
             }
             if (item.instrument) item.instrument = remapInstrumentLinks(item, target => prefix + target).instrument;
-            merged.items[id] = item;
+            merged.items[id] = item.type === "measurementPanel" ? remapPanelLinks(item, target => prefix + target) : item;
           }
         }
         return merged;
@@ -5799,6 +5806,7 @@
         applyTransformerFlowMeasurements(simulationNetwork, electricalResults, powerFlows, { electricalData });
         const animatedFlow = flowAnimationEnabled ? powerFlows : null;
         diagram = viewDiagram;
+        circuitMeasurements = createMeasurementContext({ diagram, network: simulationNetwork, results: electricalResults, flow: powerFlows });
         monitorTransformerOverload(evaluateAlarm);
         monitorTransformerOverflux(evaluateAlarm);
         monitorGeneratorOverload(evaluateAlarm);
@@ -5829,7 +5837,9 @@
               (studyOverlay?.severity?.get(k) ? " study-" + studyOverlay.severity.get(k) : ""),
             "data-id": k,
           });
-          if (renderTechnicalSymbol(g, o, E)) {
+          if (o.type === "measurementPanel") {
+            renderMeasurementPanel(g, o, circuitMeasurements, E);
+          } else if (renderTechnicalSymbol(g, o, E)) {
             const labelDistance = o.reconstruction?.labelDistance ?? ({ utility: 62, transformer: 58, turbogenerator: 52, load: 50, motor: 50, capacitor: 50 }[o.type] || 36);
             addLabels(g, o, o.x ?? (o.x1 + o.x2) / 2, o.y ?? (o.y1 + o.y2) / 2, o.type === "cable" ? 18 : labelDistance * (o.scale || 1));
           } else if (o.type === "annotationLine") {
@@ -6246,6 +6256,7 @@
         const o = diagram.items[k];
         $("#utilityDisturbance").hidden = o.type !== "utility";
         if (!eng) {
+          if (measurementPanelFor(diagram, k)) { measurementPanelEditor.open(k); return; }
           if (isCatalogEquipment(o) && o.type !== "motor") { componentEditor.open(k); return; }
           if (!operatorSession) {
             $("#status").textContent =
@@ -6465,6 +6476,7 @@
         properties();
       }
       function itemBounds(o) {
+        if (o.type === "measurementPanel") return panelBounds(o);
         const z = o.scale || 1;
         if (o.x != null && o.y != null && o.type !== "text")
           return {
@@ -6566,6 +6578,9 @@
         if (tool === "select") {
           marqueeSelect(e, p);
           return;
+        } else if (tool === "measurementPanel") {
+          pushHistory(); const k = newId(); diagram.items[k] = createMeasurementPanel(p);
+          selected = k; selectedIds = new Set([k]); choose("select"); local(); measurementPanelEditor.open(k);
         } else if (EQUIPMENT_CATALOG[tool] && tool !== "cable") {
           pushHistory(); const k = newId(); diagram.items[k] = createEquipment(tool, p);
           selected = k; selectedIds = new Set([k]); choose("select"); local();
@@ -6753,6 +6768,7 @@
               ? conductorGroup(selectedGroupIds[0])
               : null;
         $("#fields").hidden = !o;
+        $("#measurementPanelBtn").hidden = !eng || !o || !measurementPanelFor(diagram, selected);
         $("#none").hidden = !!o;
         $("#none").textContent =
           count > 1
@@ -6965,6 +6981,14 @@
       };
       const componentEditor = attachComponentEditor({ getDiagram: () => diagram, canEdit: () => eng,
         onSave: (id, next) => { if (!eng || !diagram.items[id]) return; pushHistory(); diagram.items[id] = next; local(); $("#status").textContent = "Componente salvo"; } });
+      const measurementPanelEditor = attachMeasurementPanelEditor({ getDiagram: () => diagram, getContext: () => circuitMeasurements, canEdit: () => eng,
+        onSave: (id, next, removeIds) => {
+          if (!eng || !diagram.items[id]) return;
+          pushHistory(); for (const memberId of removeIds) delete diagram.items[memberId];
+          diagram.items[id] = next; selected = id; selectedIds = new Set([id]); local();
+          $("#status").textContent = "Painel salvo no rascunho. Publique a aba para liberar à operação.";
+        } });
+      $("#measurementPanelBtn").onclick = () => measurementPanelEditor.open(selected);
       const electricalNames = [
         "nominalKV",
         "frequencyHz",
@@ -7811,7 +7835,7 @@
         const pasted = [];
         const pastedIds = new Map(copied.map(entry => [entry.id, newId()]));
         for (const original of copied) {
-          const o = remapInstrumentLinks(structuredClone(original.item), id => pastedIds.get(id)),
+          const o = remapPanelLinks(remapInstrumentLinks(structuredClone(original.item), id => pastedIds.get(id)), id => pastedIds.get(id) || id),
             k = pastedIds.get(original.id);
           delete o.topology;
           delete o.conductorGroupId;

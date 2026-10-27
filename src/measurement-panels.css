@@ -1,0 +1,19 @@
+.measurement-panel-editor { width:min(1100px,96vw); max-height:94dvh; padding:0; border:1px solid #9bafb8; border-radius:12px; color:#20343f; background:#f6f9fa; }
+.measurement-panel-editor::backdrop { background:#07141c88; }
+.measurement-panel-editor header,.measurement-panel-editor footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; background:white; }
+.measurement-panel-editor h2 { margin:0; font-size:20px; }
+.measurement-panel-editor button { border:1px solid #9bafb8; border-radius:7px; padding:9px 15px; cursor:pointer; background:#fff; color:#20343f; font-weight:700; }
+.measurement-panel-editor button[data-save] { background:#236f75; color:#fff; border-color:#236f75; }
+.measurement-panel-editor footer { justify-content:flex-end; border-top:1px solid #cbd6db; }
+.meter-editor-body { max-height:calc(94dvh - 150px); overflow:auto; padding:18px 20px; }
+.meter-editor-settings { display:grid; grid-template-columns:2fr 1fr 1fr 2fr; gap:12px; }
+.measurement-panel-editor label { display:flex; flex-direction:column; gap:6px; font-size:12px; font-weight:650; min-width:0; }
+.measurement-panel-editor input,.measurement-panel-editor select { box-sizing:border-box; width:100%; min-height:38px; border:1px solid #acbec7; border-radius:6px; background:white; padding:7px; color:#20343f; font:inherit; }
+.meter-editor-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(240px,1fr); gap:20px; align-items:start; }
+.meter-editor-layout aside { position:sticky; top:0; padding:12px; background:#e7edef; border-radius:9px; }
+.meter-editor-layout svg { display:block; width:100%; max-height:550px; margin-top:12px; }
+.meter-editor-row { border:1px solid #becdd3; border-radius:7px; padding:10px; margin:0 0 12px; display:grid; grid-template-columns:1.2fr 1.1fr 2fr 1fr .7fr; gap:9px; background:white; }
+.meter-editor-row legend { font-size:12px; font-weight:750; padding:0 6px; }
+.meter-editor-hint { font-size:12px; line-height:1.6; color:#536b77; }
+.meter-editor-status { color:#9a422a; font-size:13px; }
+@media(max-width:900px) { .meter-editor-settings { grid-template-columns:1fr 1fr; } .meter-editor-layout { grid-template-columns:1fr; } .meter-editor-layout aside { position:static; } .meter-editor-layout svg { max-height:320px; } .meter-editor-row { grid-template-columns:1fr 1fr; } .meter-editor-row label:nth-of-type(3) { grid-column:1/-1; } }
