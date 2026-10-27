@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6.1</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6.2</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -2612,6 +2612,7 @@
       import { attachSequenceFields } from "./src/sequence-fields.js?v=49.2";
       import { createSwitchingStudy, electricalTerminals } from "./src/switching-analysis.js?v=49.6";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
+      import { startItemDrag } from "./src/engineering-drag.js?v=49.6.2";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
       import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.6.1";
       const cfg = {
@@ -2671,6 +2672,8 @@
         sessionClosing = false,
         sessionExitNotice = "",
         undoStack = [],
+        engineeringDrag = null,
+        engineeringDrawPending = false,
         diagram = { name: "Diagrama principal", items: {} },
         currentDiagramId = localStorage.getItem("simuDiagramId") || "principal",
         diagramCatalog = {},
@@ -3565,6 +3568,35 @@
           );
         return touching(a, b);
       }
+      function itemConnectionGraph(entries) {
+        const index = new Map(entries.map(([id], i) => [id, i])),
+          neighbors = new Map(entries.map(([id]) => [id, new Set()])),
+          groups = new Map(), geometric = [];
+        const connect = (a, b) => {
+          if (a === b || !neighbors.has(a) || !neighbors.has(b)) return;
+          neighbors.get(a).add(b); neighbors.get(b).add(a);
+        };
+        for (const [id, item] of entries) {
+          if (hasExplicitTopology(item)) {
+            for (const target of topologyTargets(item)) connect(id, target);
+          } else geometric.push([id, item]);
+          if (item.conductorGroupId) {
+            const members = groups.get(item.conductorGroupId) || [];
+            for (const other of members) connect(id, other);
+            members.push(id); groups.set(item.conductorGroupId, members);
+          }
+        }
+        // Explicit terminals connect by ID. Only unconfigured objects require
+        // pairwise geometry, preserving the original crossing/group rules.
+        for (let i = 0; i < geometric.length; i++)
+          for (let j = i + 1; j < geometric.length; j++)
+            if (!neighbors.get(geometric[i][0]).has(geometric[j][0]) &&
+                touching(geometric[i][1], geometric[j][1]))
+              connect(geometric[i][0], geometric[j][0]);
+        // Preserve the old traversal order when several breakers are nearby.
+        return new Map(entries.map(([id]) => [id, [...neighbors.get(id)]
+          .sort((a, b) => index.get(a) - index.get(b))]));
+      }
       function topologyPoint(target, fromPoint, role) {
         if (!target) return fromPoint;
         const t = terminals(target);
@@ -3594,25 +3626,18 @@
           ? pointSeg(p, t[0], t[1]) <= 20
           : t.some((q) => d2(p, q) <= 24);
       }
-      function nearestBreaker(p, skipId) {
-        const entries = Object.entries(diagram.items || {}).filter(
+      function nearestBreaker(p, skipId, lookup = {}) {
+        // All transformer terminals search the same non-transformer graph.
+        // Reuse it only within this calculation so editing can never stale it.
+        if (!lookup.graph) {
+          const entries = Object.entries(diagram.items || {}).filter(
             ([id, o]) =>
               id !== skipId && o.type !== "transformer" && isElectrical(o),
           ),
-          graph = new Map(entries.map(([id]) => [id, []]));
-        for (let i = 0; i < entries.length; i++)
-          for (let j = i + 1; j < entries.length; j++)
-            if (
-              itemsConnected(
-                entries[i][0],
-                entries[i][1],
-                entries[j][0],
-                entries[j][1],
-              )
-            ) {
-              graph.get(entries[i][0]).push(entries[j][0]);
-              graph.get(entries[j][0]).push(entries[i][0]);
-            }
+            graph = itemConnectionGraph(entries);
+          Object.assign(lookup, { entries, graph });
+        }
+        const { entries, graph } = lookup;
         const q = entries
             .filter(([, o]) => touchesPoint(o, p))
             .map(([id]) => id),
@@ -3629,7 +3654,7 @@
         }
         return null;
       }
-      function transformerSwitches(id) {
+      function transformerSwitches(id, lookup = {}) {
         const t = terminals(diagram.items[id]),
           explicit = Object.entries(diagram.items || {}).filter(
             ([, o]) =>
@@ -3642,8 +3667,8 @@
             ([, o]) => o.topology.role === "transformer_secondary",
           )?.[0];
         return {
-          primary: primary || nearestBreaker(t[0], id),
-          secondary: secondary || nearestBreaker(t[1], id),
+          primary: primary || nearestBreaker(t[0], id, lookup),
+          secondary: secondary || nearestBreaker(t[1], id, lookup),
         };
       }
       function transformerSequenceViolation(command) {
@@ -3945,6 +3970,7 @@
         return { zones: zones.filter((z) => z.length), componentForPoint };
       }
       function calculateElectricalState() {
+        const breakerLookup = {};
         const entries = Object.entries(diagram.items || {}).filter(([, o]) =>
             isElectrical(o),
           ),
@@ -3955,20 +3981,7 @@
                 o.state !== "closed"
               ),
           ),
-          graph = new Map(conductive.map(([k]) => [k, []]));
-        for (let i = 0; i < conductive.length; i++)
-          for (let j = i + 1; j < conductive.length; j++)
-            if (
-              itemsConnected(
-                conductive[i][0],
-                conductive[i][1],
-                conductive[j][0],
-                conductive[j][1],
-              )
-            ) {
-              graph.get(conductive[i][0]).push(conductive[j][0]);
-              graph.get(conductive[j][0]).push(conductive[i][0]);
-            }
+          graph = itemConnectionGraph(conductive);
         const loadValues = (o) => {
             const e = electricalData(o);
             if (o.type === "capacitor") {
@@ -4327,7 +4340,7 @@
           for (const k of transformerIds) {
             const ends = terminals(diagram.items[k]),
               neighbors = graph.get(k) || [],
-              mapped = transformerSwitches(k),
+              mapped = transformerSwitches(k, breakerLookup),
               mappedPrimary = mapped.primary && diagram.items[mapped.primary],
               mappedSecondary =
                 mapped.secondary && diagram.items[mapped.secondary],
@@ -5757,6 +5770,7 @@
         }
       }
       function draw(evaluateAlarm = false, skipSupplyAlarms = false) {
+        if (engineeringDrag) { engineeringDrawPending = true; return; }
         stage.classList.toggle("reference-layout", !!diagram.reconstruction);
         $("#diagramReviewNotice").hidden = !diagram.reconstruction;
         $("#diagramReviewNotice").textContent = diagram.reconstruction?.reviewNote || "GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.";
@@ -6226,6 +6240,7 @@
       $("#distReset").onclick = () => applyUtilityDisturbance(true);
       function down(e, k) {
         e.stopPropagation();
+        if (eng && (e.button !== 0 || e.isPrimary === false)) return;
         const o = diagram.items[k];
         $("#utilityDisturbance").hidden = o.type !== "utility";
         if (!eng) {
@@ -6418,49 +6433,34 @@
           selected = selectedIds.has(k)
             ? k
             : selectedIds.values().next().value || null;
-          draw();
+          refreshSelection();
           $("#status").textContent =
             selectedIds.size + " objeto(s) selecionado(s)";
           return;
         }
         if (!selectedIds.has(k)) selectedIds = new Set(selectionUnit);
         selected = k;
-        draw();
+        refreshSelection();
         if (tool !== "select") return;
-        const p0 = pt(e),
-          copies = new Map(
-            [...selectedIds]
-              .filter((id) => diagram.items[id])
-              .map((id) => [id, structuredClone(diagram.items[id])]),
-          );
-        pushHistory();
-        stage.setPointerCapture(e.pointerId);
-        const move = (v) => {
-          const p = pt(v),
-            dx = p.x - p0.x,
-            dy = p.y - p0.y;
-          for (const [id, copy] of copies) {
-            const item = diagram.items[id];
-            if (!item) continue;
-            if (item.x != null && item.y != null) {
-              item.x = copy.x + dx;
-              item.y = copy.y + dy;
-            } else {
-              item.x1 = copy.x1 + dx;
-              item.y1 = copy.y1 + dy;
-              item.x2 = copy.x2 + dx;
-              item.y2 = copy.y2 + dy;
-            }
-          }
-          draw();
-        };
-        const up = () => {
-          stage.removeEventListener("pointermove", move);
-          stage.removeEventListener("pointerup", up);
-          local();
-        };
-        stage.addEventListener("pointermove", move);
-        stage.addEventListener("pointerup", up);
+        engineeringDrag?.cancel();
+        const editing = diagram, editingItems = diagram.items;
+        engineeringDrag = startItemDrag({ stage, event: e, items: editingItems,
+          ids: selectedIds, point: pt, beforeCommit: pushHistory,
+          isCurrent: () => eng && diagram === editing && diagram.items === editingItems,
+          onFinish: changed => {
+            engineeringDrag = null;
+            const pending = engineeringDrawPending;
+            engineeringDrawPending = false;
+            if (changed) local(); else if (pending) draw();
+          },
+        });
+      }
+      function refreshSelection() {
+        for (const node of stage.querySelectorAll(".item"))
+          node.classList.toggle("selected", selectedIds.has(node.dataset.id) || selected === node.dataset.id);
+        for (const node of stage.querySelectorAll(".instrument-link")) node.remove();
+        if (eng) renderInstrumentLinks(stage, diagram, selectedIds, E);
+        properties();
       }
       function itemBounds(o) {
         const z = o.scale || 1;
@@ -6513,6 +6513,8 @@
         const up = () => {
           stage.removeEventListener("pointermove", move);
           stage.removeEventListener("pointerup", up);
+          rect.remove();
+          if (stage.hasPointerCapture?.(e.pointerId)) stage.releasePointerCapture(e.pointerId);
           if (!moved) {
             if (!additive) {
               selectedIds.clear();
@@ -6548,7 +6550,7 @@
             $("#status").textContent =
               selectedIds.size + " objeto(s) selecionado(s)";
           }
-          draw();
+          refreshSelection();
         };
         stage.addEventListener("pointermove", move);
         stage.addEventListener("pointerup", up);
@@ -8363,6 +8365,7 @@
         draw(false);
       };
       function setMode(on) {
+        if (!on) engineeringDrag?.cancel();
         eng = on;
         guest = !on && !operatorSession;
         $("#workspace").classList.toggle("eng", on);
@@ -8854,4 +8857,5 @@
     </script>
   </body>
 </html>
+
 

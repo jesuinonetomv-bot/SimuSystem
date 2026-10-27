@@ -31,6 +31,8 @@ assert.ok(sw.includes('"./src/switching-analysis.js?v=49.2"'),
   "Switching analysis must be in the offline asset list");
 assert.ok(sw.includes('"./src/diagram-gestures.js?v=42"'),
   "Diagram gestures must be in the offline asset list");
+assert.ok(sw.includes('"./src/engineering-drag.js?v=49.6.2"'),
+  "Engineering drag must be in the offline asset list");
 assert.ok(sw.includes('"./src/session-timeout.js?v=40"'),
   "Session timeout must be in the offline asset list");
 assert.ok(sw.includes('"./src/flow-animation.js?v=49.6.1"'),
@@ -48,4 +50,5 @@ console.log("Application syntax, module paths, command/alarm controls and offlin
 
 for (const id of ["fsPoint", "fsType", "fsPhases", "fsRun", "fsDiagram", "fsEventRows", "fsProtectionRows", "fsPlay", "fsCSV", "fsCases"])
   assert.equal(uiIds.filter(x => x === id).length, 1, "Duplicate/missing fault sequence ID: " + id);
+
 
