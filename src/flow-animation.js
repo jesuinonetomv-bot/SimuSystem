@@ -302,13 +302,23 @@ export function applyTransformerFlowMeasurements(network, measurements, flow, { 
 
 export function arrowPose(segment, quantity, timestamp, index = 0, count = 1, separated = true, reduced = false) {
   const value = quantity === "p" ? segment.activeMW : segment.reactiveMvar;
-  const dx = segment.to.x - segment.from.x, dy = segment.to.y - segment.from.y, length = Math.hypot(dx, dy);
+  const route = segment.displayRoute, straightDX = segment.to.x - segment.from.x,
+    straightDY = segment.to.y - segment.from.y;
+  const length = segment.displayLength || Math.hypot(straightDX, straightDY);
   const margin = Math.min(8, length / 4), travel = Math.max(1, length - 2 * margin);
   const phase = reduced ? (index + 1) / (count + 1) : ((timestamp * .035 / travel) + index / count + (quantity === "q" ? .35 : 0)) % 1;
-  const progress = (margin + (value < 0 ? 1 - phase : phase) * travel) / length;
+  let remaining = margin + (value < 0 ? 1 - phase : phase) * travel, part = 0,
+    from = segment.from, dx = straightDX, dy = straightDY, partLength = length || 1;
+  if (route && segment.displayLengths) {
+    const lengths = segment.displayLengths;
+    while (part < lengths.length - 1 && remaining > lengths[part]) remaining -= lengths[part++];
+    from = route[part]; dx = route[part + 1].x - from.x; dy = route[part + 1].y - from.y;
+    partLength = lengths[part] || 1;
+  }
+  const progress = remaining / partLength;
   const offset = separated ? (quantity === "p" ? -4 : 4) : 0;
-  return { x: segment.from.x + dx * progress - dy / length * offset,
-    y: segment.from.y + dy * progress + dx / length * offset,
+  return { x: from.x + dx * progress - dy / partLength * offset,
+    y: from.y + dy * progress + dx / partLength * offset,
     angle: Math.atan2(dy, dx) * 180 / Math.PI + (value < 0 ? 180 : 0) };
 }
 
@@ -383,4 +393,5 @@ export function createFlowAnimator({ stage, page = stage.ownerDocument, ownerWin
     },
   };
 }
+
 

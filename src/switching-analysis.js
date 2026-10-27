@@ -1,6 +1,7 @@
 // Terminal graph for switching studies. The commanded switch is removed
 // before looking for an alternate electrical path; transformers keep two ports.
 import { cableEquivalent, equipmentDefaults } from "./equipment-library.js?v=49.2";
+import { allowsCrossingTap } from "./conductor-crossings.js?v=49.8";
 const SWITCHES = new Set(["breaker", "disconnector"]);
 const CONTACTS = new Set(["breaker", "disconnector", "fuse"]);
 const CONDUCTORS = new Set(["line", "bus"]);
@@ -111,7 +112,10 @@ export function createSwitchingStudy(diagram, options = {}) {
   function targetPort(targetId, fromId, fromPoint, role) {
     const target = items[targetId], ps = ports.get(targetId);
     if (!target || !ps) return null;
-    if (CONDUCTORS.has(target.type)) return conductorTap(targetId, fromPoint);
+    if (CONDUCTORS.has(target.type)) {
+      if (!allowsCrossingTap(target, fromPoint)) return null;
+      return conductorTap(targetId, fromPoint);
+    }
     if (target.type === "transformer") {
       if (role === "transformer_primary") return ps[0];
       if (role === "transformer_secondary") return ps[1];
@@ -156,7 +160,7 @@ export function createSwitchingStudy(diagram, options = {}) {
         for (const key of pointPorts) {
           const p = points.get(key);
           const q = project(p, points.get(cp[0]), points.get(cp[1]));
-          if (distance(p, q) <= tolerance)
+          if (distance(p, q) <= tolerance && allowsCrossingTap(items[conductorId], p))
             edge(key, conductorTap(conductorId, p), null);
         }
       }
@@ -186,7 +190,8 @@ export function createSwitchingStudy(diagram, options = {}) {
         if ((!CONTACTS.has(device.type) && device.type !== "transformer") || configured(device)) return false;
         const dp = ports.get(deviceId); if (!dp || dp.length !== 2) return false;
         const p = points.get(dp[0]), q = points.get(dp[1]), pa = project(p, a, b), pb = project(q, a, b);
-        return distance(p, pa) <= tolerance && distance(q, pb) <= tolerance && Math.abs(pa.t - pb.t) > EPS;
+        return distance(p, pa) <= tolerance && distance(q, pb) <= tolerance &&
+          allowsCrossingTap(bus, p) && allowsCrossingTap(bus, q) && Math.abs(pa.t - pb.t) > EPS;
       });
       if (inlineDevice) continue;
       for (const key of ps) edge(key, conductorTap(targetId, points.get(key)), null);
@@ -218,6 +223,7 @@ export function createSwitchingStudy(diagram, options = {}) {
       const p = points.get(dp[0]), q = points.get(dp[1]);
       const pa = project(p, a, b), pb = project(q, a, b);
       if (distance(p, pa) <= tolerance && distance(q, pb) <= tolerance &&
+          allowsCrossingTap(items[id], p) && allowsCrossingTap(items[id], q) &&
           Math.abs(pa.t - pb.t) > EPS)
         cuts.push([Math.min(pa.t, pb.t), Math.max(pa.t, pb.t)]);
     }
@@ -480,4 +486,5 @@ export function createSwitchingStudy(diagram, options = {}) {
 export function analyzeSwitching(diagram, switchId, options = {}) {
   return createSwitchingStudy(diagram, options).analyze(switchId);
 }
+
 

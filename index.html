@@ -1381,7 +1381,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.7.1</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.8</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -1534,6 +1534,8 @@
                 ⛓ Configurar conexões</button
               ><button type="button" id="measurementPanelBtn" hidden>
                 ▤ Configurar painel</button
+              ><button type="button" id="removeCrossings" hidden>
+                Remover pontes</button
               ><button class="danger" id="remove">Excluir</button>
             </div>
           </div>
@@ -1574,6 +1576,7 @@
             <span class="group-title">Desenho</span
             ><button class="tool" data-tool="bus"><b>━</b>Barramento</button
             ><button class="tool" data-tool="line"><b>─</b>Conexão</button><button class="tool" data-tool="cable"><b>═</b>Cabo</button>
+            <button class="tool" data-tool="crossingBridge" title="Passe uma conexão sobre outra sem ligação elétrica"><b>⌒</b>Ponte sem conexão</button>
           </div>
           <div class="group">
             <span class="group-title">Anotações</span
@@ -2615,14 +2618,15 @@
       import { attachComponentEditor } from "./src/component-editor.js?v=49.2";
       import { createMeasurementContext, createMeasurementPanel, renderMeasurementPanel, panelBounds, measurementPanelFor, remapPanelLinks } from "./src/measurement-panels.js?v=49.7";
       import { attachMeasurementPanelEditor } from "./src/measurement-panel-editor.js?v=49.7";
-      import { renderTechnicalSymbol, renderInstrumentLinks } from "./src/technical-symbols.js?v=49.3";
+      import { renderTechnicalSymbol, renderInstrumentLinks } from "./src/technical-symbols.js?v=49.8";
+      import { allowsCrossingTap, placeConductorCrossing, conductorCrossingPaths, renderCrossingMask, routeCrossingFlow } from "./src/conductor-crossings.js?v=49.8";
       import { attachStudyWorkbench } from "./src/study-workbench.js?v=49.2";
       import { attachSequenceFields } from "./src/sequence-fields.js?v=49.2";
-      import { createSwitchingStudy, electricalTerminals } from "./src/switching-analysis.js?v=49.6";
+      import { createSwitchingStudy, electricalTerminals } from "./src/switching-analysis.js?v=49.8";
       import { attachDiagramGestures } from "./src/diagram-gestures.js?v=42";
       import { startItemDrag } from "./src/engineering-drag.js?v=49.6.2";
       import { attachSessionTimeout } from "./src/session-timeout.js?v=40";
-      import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.6.1";
+      import { calculateAnimatedFlow, createFlowAnimator, applyTransformerFlowMeasurements } from "./src/flow-animation.js?v=49.8";
       const cfg = {
           apiKey: "AIzaSyC5c97xzUtuWGvsDnVJZVuLgeEwjv474G4",
           authDomain: "simusytem.firebaseapp.com",
@@ -3546,12 +3550,15 @@
           bLine = b.type === "line" || b.type === "bus";
         if (aLine && bLine)
           return (
-            A.some((p) => pointSeg(p, B[0], B[1]) <= 14) ||
-            B.some((p) => pointSeg(p, A[0], A[1]) <= 14)
+            A.some((p) => pointSeg(p, B[0], B[1]) <= 14 && canTap(b, p)) ||
+            B.some((p) => pointSeg(p, A[0], A[1]) <= 14 && canTap(a, p))
           );
-        if (aLine) return B.some((p) => pointSeg(p, A[0], A[1]) <= 20);
-        if (bLine) return A.some((p) => pointSeg(p, B[0], B[1]) <= 20);
+        if (aLine) return B.some((p) => pointSeg(p, A[0], A[1]) <= 20 && canTap(a, p));
+        if (bLine) return A.some((p) => pointSeg(p, B[0], B[1]) <= 20 && canTap(b, p));
         return A.some((p) => B.some((q) => d2(p, q) <= 24));
+      }
+      function canTap(o, p) {
+        return !o?.crossings?.length || allowsCrossingTap(o, p);
       }
       function hasExplicitTopology(o) {
         if (!o?.topology?.terminalA) return false;
@@ -3559,7 +3566,8 @@
       }
       function topologyTargets(o) {
         return hasExplicitTopology(o)
-          ? [o.topology.terminalA, o.topology.terminalB].filter(Boolean)
+          ? [o.topology.terminalA, o.topology.terminalB].filter((id, i) =>
+            id && canTap(diagram.items[id], terminals(o)[i]))
           : [];
       }
       function itemsConnected(idA, a, idB, b) {
@@ -3633,7 +3641,7 @@
       function touchesPoint(o, p) {
         const t = terminals(o);
         return o.type === "line" || o.type === "bus"
-          ? pointSeg(p, t[0], t[1]) <= 20
+          ? pointSeg(p, t[0], t[1]) <= 20 && canTap(o, p)
           : t.some((q) => d2(p, q) <= 24);
       }
       function nearestBreaker(p, skipId, lookup = {}) {
@@ -3890,7 +3898,7 @@
             if (j === k) continue;
             for (const p of terminals(x)) {
               const q = projectPoint(p, ab[0], ab[1]);
-              if (d2(p, q) <= 36) pts.push(q);
+              if (d2(p, q) <= 36 && canTap(o, p)) pts.push(q);
             }
           }
           for (const [, sw] of switches) {
@@ -3900,6 +3908,7 @@
             if (
               d2(st[0], qa) <= 36 &&
               d2(st[1], qb) <= 36 &&
+              canTap(o, st[0]) && canTap(o, st[1]) &&
               Math.abs(qa.t - qb.t) > 0.001
             )
               cuts.push([Math.min(qa.t, qb.t), Math.max(qa.t, qb.t)]);
@@ -3924,7 +3933,7 @@
             if (hasExplicitTopology(o)) {
               const a = diagram.items[o.topology.terminalA],
                 b = diagram.items[o.topology.terminalB];
-              if (a && b)
+              if (a && b && canTap(a, t[0]) && canTap(b, t[1]))
                 edge(
                   node(topologyPoint(a, t[0], o.topology.role)),
                   node(topologyPoint(b, t[1], o.topology.role)),
@@ -5040,7 +5049,7 @@
                 : terminals(x);
             for (const p of add) {
               const q = projectPoint(p, ab[0], ab[1]);
-              if (d2(p, q) <= 16) pts.push(q);
+              if (d2(p, q) <= 16 && canTap(o, p)) pts.push(q);
             }
           }
           pts.sort((x, y) => x.t - y.t);
@@ -5814,6 +5823,7 @@
         if (eng) renderInstrumentLinks(stage, diagram, selectedIds, E);
         const diagramReadouts = referenceReadouts(diagram, electricalResults, simulationNetwork);
         const list = Object.entries(diagram.items || {});
+        const wireMask = renderCrossingMask(stage, diagram.items || {}, E);
         $("#empty").hidden = !!list.length;
         $("#empty").textContent = eng && !currentDiagramId ? "Nenhuma aba ativa. Abra Diagramas para criar ou restaurar uma aba." : "Nenhum diagrama publicado";
         for (const [k, o] of list) {
@@ -5840,7 +5850,7 @@
           });
           if (o.type === "measurementPanel") {
             renderMeasurementPanel(g, o, circuitMeasurements, E);
-          } else if (renderTechnicalSymbol(g, o, E)) {
+          } else if (renderTechnicalSymbol(g, o, E, wireMask)) {
             const labelDistance = o.reconstruction?.labelDistance ?? ({ utility: 62, transformer: 58, turbogenerator: 52, load: 50, motor: 50, capacitor: 50 }[o.type] || 36);
             addLabels(g, o, o.x ?? (o.x1 + o.x2) / 2, o.y ?? (o.y1 + o.y2) / 2, o.type === "cable" ? 18 : labelDistance * (o.scale || 1));
           } else if (o.type === "annotationLine") {
@@ -5934,25 +5944,32 @@
               }),
             );
           } else {
-            g.append(
+            const crossing = conductorCrossingPaths(o);
+            if (crossing) {
+              g.append(E("path", { d: crossing.path, class: o.type === "bus" ? "bus" : "wire",
+                fill: "none", ...(wireMask ? { mask: wireMask } : {}) }),
+                E("path", { d: crossing.arcs, class: o.type === "bus" ? "bus" : "wire", fill: "none" }));
+            } else g.append(
               E("line", {
                 x1: o.x1,
                 y1: o.y1,
                 x2: o.x2,
                 y2: o.y2,
                 class: o.type === "bus" ? "bus" : "wire",
+                ...(wireMask ? { mask: wireMask } : {}),
               }),
             );
             if (!o.conductorGroupId)
               addLabels(g, o, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, 14);
             if (o.reconstruction?.boundaryArrow)
               g.append(E("path", { d: "M" + (o.x2 - 5) + " " + (o.y2 - 8) + " L" + (o.x2 + 5) + " " + (o.y2 - 8) + " L" + o.x2 + " " + o.y2 + " Z", fill: "#101820" }));
+            const selectionPadding = crossing ? 24 : 9;
             g.append(
               E("rect", {
-                x: Math.min(o.x1, o.x2) - 9,
-                y: Math.min(o.y1, o.y2) - 9,
-                width: Math.abs(o.x2 - o.x1) + 18,
-                height: Math.abs(o.y2 - o.y1) + 18,
+                x: Math.min(o.x1, o.x2) - selectionPadding,
+                y: Math.min(o.y1, o.y2) - selectionPadding,
+                width: Math.abs(o.x2 - o.x1) + 2 * selectionPadding,
+                height: Math.abs(o.y2 - o.y1) + 2 * selectionPadding,
                 class: "sel",
               }),
             );
@@ -5976,10 +5993,12 @@
           stage.append(g);
         }
         const visibleSegments = (animatedFlow?.segments || [])
-          .filter((segment) => diagram.items[segment.itemId]);
+          .filter((segment) => diagram.items[segment.itemId])
+          .map(segment => routeCrossingFlow(segment, diagram.items[segment.itemId]));
         flowAnimator.update({
           segments: visibleSegments,
-          illustrativeSegments: (animatedFlow?.illustrativeSegments || []).filter(segment => diagram.items[segment.itemId]),
+          illustrativeSegments: (animatedFlow?.illustrativeSegments || []).filter(segment => diagram.items[segment.itemId])
+            .map(segment => routeCrossingFlow(segment, diagram.items[segment.itemId])),
           enabled: flowAnimationEnabled,
           showActive: $("#flowShowActive").checked,
           showReactive: $("#flowShowReactive").checked,
@@ -6015,6 +6034,20 @@
           .querySelectorAll(".tool")
           .forEach((b) => b.classList.toggle("active", b.dataset.tool === t));
         draw();
+        if (t === "crossingBridge") $("#status").textContent =
+          "Clique no cruzamento para inserir a ponte. Selecione antes a conexão que deve passar por cima; sem seleção, será usada a vertical. Clique novamente para remover.";
+      }
+      function insertCrossing(p, hitId = null) {
+        if (!eng) return;
+        const result = placeConductorCrossing(diagram.items || {}, p, { preferredId: selected, hitId });
+        if (result.error) { $("#status").textContent = result.error; return; }
+        pushHistory();
+        const id = result.id || newId();
+        diagram.items[id] = result.item;
+        selected = id; selectedIds = new Set([id]);
+        choose("select"); local();
+        $("#status").textContent = result.added ?
+          "Ponte inserida: a conexão continua entre as pontas e não se liga à linha que passa por baixo." : "Ponte removida.";
       }
       document
         .querySelectorAll(".tool")
@@ -6255,6 +6288,11 @@
         e.stopPropagation();
         if (eng && (e.button !== 0 || e.isPrimary === false)) return;
         const o = diagram.items[k];
+        if (eng && tool === "crossingBridge") {
+          if (["line", "bus"].includes(o.type)) insertCrossing(pt(e), k);
+          else $("#status").textContent = "Clique em uma conexão ou barramento para colocar a ponte.";
+          return;
+        }
         $("#utilityDisturbance").hidden = o.type !== "utility";
         if (!eng) {
           if (measurementPanelFor(diagram, k)) { measurementPanelEditor.open(k); return; }
@@ -6491,11 +6529,12 @@
             w = Math.max(70, (o.name || "Texto").length * fs * 0.62);
           return { x1: o.x - 8, y1: o.y - fs - 8, x2: o.x + w, y2: o.y + 10 };
         }
+        const padding = o.crossings?.length ? 24 : 8;
         return {
-          x1: Math.min(o.x1, o.x2) - 8,
-          y1: Math.min(o.y1, o.y2) - 8,
-          x2: Math.max(o.x1, o.x2) + 8,
-          y2: Math.max(o.y1, o.y2) + 8,
+          x1: Math.min(o.x1, o.x2) - padding,
+          y1: Math.min(o.y1, o.y2) - padding,
+          x2: Math.max(o.x1, o.x2) + padding,
+          y2: Math.max(o.y1, o.y2) + padding,
         };
       }
       function marqueeSelect(e, p0) {
@@ -6579,6 +6618,8 @@
         if (tool === "select") {
           marqueeSelect(e, p);
           return;
+        } else if (tool === "crossingBridge") {
+          insertCrossing(p);
         } else if (tool === "measurementPanel") {
           pushHistory(); const k = newId(); diagram.items[k] = createMeasurementPanel(p);
           selected = k; selectedIds = new Set([k]); choose("select"); local(); measurementPanelEditor.open(k);
@@ -6770,6 +6811,7 @@
               : null;
         $("#fields").hidden = !o;
         $("#measurementPanelBtn").hidden = !eng || !o || !measurementPanelFor(diagram, selected);
+        $("#removeCrossings").hidden = !eng || !o?.crossings?.length;
         $("#none").hidden = !!o;
         $("#none").textContent =
           count > 1
@@ -6869,6 +6911,12 @@
         undoStack.push(JSON.stringify(diagram));
         if (undoStack.length > 50) undoStack.shift();
       }
+      $("#removeCrossings").onclick = () => {
+        const o = diagram.items[selected];
+        if (!eng || !o?.crossings?.length) return;
+        pushHistory(); delete o.crossings; local();
+        $("#status").textContent = "Pontes removidas da conexão selecionada.";
+      };
       function undo() {
         if (!undoStack.length) {
           $("#status").textContent = "Nada para desfazer";

@@ -2,6 +2,24 @@
 
 Protótipo vetorial e responsivo do simulador de manobras do sistema elétrico.
 
+## Cruzamento sem conexão (v49.8)
+
+Em **Modelagem → Inserir → Ponte sem conexão**, clique no cruzamento de uma
+conexão/barramento existente. Selecione antes o fio que deve passar por cima;
+sem seleção, o cruzamento usa o fio vertical. O arco impede a ligação elétrica
+naquele ponto e mantém a continuidade do próprio fio. Funciona também quando
+a outra linha tem uma ponta exatamente no cruzamento. Fora do arco, as
+derivações continuam disponíveis.
+
+Em um espaço vazio, a ferramenta cria um trecho vertical com uma ponte no
+meio: ligue suas duas pontas ao circuito ou use **Girar** para mudar a direção.
+Conexões longas aceitam várias pontes. Para remover uma, ative a ferramenta
+e clique novamente sobre o arco; **Remover pontes**, nas propriedades da
+conexão selecionada, remove todas. **Desfazer** restaura a alteração.
+Salve e publique a aba para liberar o desenho aos operadores. As pontes são
+consideradas pela animação, pelas medições e pela topologia dos estudos,
+incluindo abas existentes e novas; não acrescentam impedância ao modelo.
+
 ## Curto e sequência de atuação (v49)
 
 Em **Estudos → Curto e sequência de atuação**, escolha o ponto diretamente no
@@ -446,3 +464,4 @@ Para validar sem instalar dependências:
 
 A publicação pelo GitHub Pages executa a validação e os testes antes de enviar
 a atualização.
+

@@ -11,13 +11,13 @@ export function renderInstrumentLinks(stage, diagram, selectedIds, E) {
     }
   }
 }
-export function renderTechnicalSymbol(g, o, E) {
+export function renderTechnicalSymbol(g, o, E, wireMask = null) {
   if (o.type === "cable") {
     const dx = o.x2 - o.x1, dy = o.y2 - o.y1, length = Math.hypot(dx, dy) || 1;
     const nx = -dy / length * 2.5, ny = dx / length * 2.5;
     for (const side of [-1, 1]) g.append(E("line", { x1: o.x1 + side * nx, y1: o.y1 + side * ny,
-      x2: o.x2 + side * nx, y2: o.y2 + side * ny, class: "wire cable-wire" }));
-    for (const [x, y] of [[o.x1, o.y1], [o.x2, o.y2]]) g.append(E("line", { x1: x - nx, y1: y - ny, x2: x + nx, y2: y + ny, class: "wire" }));
+      x2: o.x2 + side * nx, y2: o.y2 + side * ny, class: "wire cable-wire", ...(wireMask ? { mask: wireMask } : {}) }));
+    for (const [x, y] of [[o.x1, o.y1], [o.x2, o.y2]]) g.append(E("line", { x1: x - nx, y1: y - ny, x2: x + nx, y2: y + ny, class: "wire", ...(wireMask ? { mask: wireMask } : {}) }));
     g.append(E("line", { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, stroke: "transparent", "stroke-width": 18, class: "symbol-hit" }),
       E("rect", { x: Math.min(o.x1, o.x2) - 9, y: Math.min(o.y1, o.y2) - 9, width: Math.abs(dx) + 18, height: Math.abs(dy) + 18, class: "sel" }));
     return true;
@@ -95,4 +95,5 @@ export function renderTechnicalSymbol(g, o, E) {
   g.append(inner);
   return true;
 }
+
 

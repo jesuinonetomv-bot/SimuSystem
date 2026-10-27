@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SimuSystem · Verificação de ponte sem conexão</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#edf1f3;color:#20343f;font:16px system-ui}main{max-width:1060px;margin:36px auto;padding:24px}
+  h1{font-size:26px;margin:0 0 10px}p{line-height:1.55}button{padding:11px 16px;background:#145c65;color:white;border:0;border-radius:5px;font:inherit;cursor:pointer}
+  #readings{padding:16px;background:white;border-radius:8px;margin:16px 0}svg{width:100%;border:1px solid #aeb6bc;border-radius:6px;background:#d7d7d7}
+  .wire,.bus{stroke:#1c2b35;stroke-width:3;fill:none}.energized .wire,.energized .bus{stroke:#df2020}.caption{font-size:13px;color:#54646d}
+  .power-flow-arrow{filter:drop-shadow(0 0 1px white)}.tag{font-size:15px;fill:#20343f}strong{display:block;margin-bottom:6px}
+</style>
+<main><h1>Ponte sem conexão · SimuSystem 49.8</h1>
+  <p>O fio vertical passa sobre o horizontal. A carga de 2 MW permanece alimentada;
+    a carga de 8 MW pertence ao outro circuito.</p>
+  <button id="toggle">Remover ponte</button><div id="readings" role="status"></div>
+  <svg id="stage" viewBox="0 0 900 480" aria-label="Cruzamento de duas conexões com circuitos independentes"></svg>
+  <p class="caption">Verificação isolada dos módulos publicados. Esta tela não modifica diagramas nem sessões do simulador.</p>
+</main>
+<script type="module">
+import { createSwitchingStudy } from "../src/switching-analysis.js?v=49.8";
+import { conductorCrossingPaths, renderCrossingMask, placeConductorCrossing, routeCrossingFlow } from "../src/conductor-crossings.js?v=49.8";
+import { createFlowAnimator } from "../src/flow-animation.js?v=49.8";
+const stage=document.querySelector('#stage'), E=(tag,attrs={},text)=>{
+  const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [key,value]of Object.entries(attrs))n.setAttribute(key,value);
+  if(text!=null)n.textContent=text;return n;
+}, animator=createFlowAnimator({stage});
+const diagram={items:{
+  vertical:{type:'line',x1:450,y1:70,x2:450,y2:410,crossings:[.5],isSource:true},
+  left:{type:'line',x1:130,y1:240,x2:450,y2:240},
+  right:{type:'line',x1:450,y1:240,x2:770,y2:240},
+  own:{type:'load',x:450,y:444,state:'active'},other:{type:'load',x:770,y:274,state:'active'}
+}};
+function draw(){
+  stage.replaceChildren();const live=createSwitchingStudy(diagram).energizedItems(), mask=renderCrossingMask(stage,diagram.items,E);
+  stage.append(E('rect',{x:85,y:105,width:730,height:220,rx:6,fill:'#84969f'}));
+  for(const id of ['vertical','left','right']){
+    const o=diagram.items[id],g=E('g',{class:live.has(id)?'energized':''}),crossing=conductorCrossingPaths(o);
+    if(crossing)g.append(E('path',{d:crossing.path,class:'wire',mask}),E('path',{d:crossing.arcs,class:'wire'}));
+    else g.append(E('line',{x1:o.x1,y1:o.y1,x2:o.x2,y2:o.y2,class:'wire',...(mask?{mask}:{})}));stage.append(g);
+  }
+  for(const [x,y,text]of [[470,65,'Fonte · 13,8 kV'],[470,420,'Carga · 2 MW'],[670,274,'Carga · 8 MW'],[110,220,'Circuito horizontal']])stage.append(E('text',{x,y,class:'tag'},text));
+  const isolated=!live.has('other');
+  document.querySelector('#readings').innerHTML=`<strong>${isolated?'Circuitos separados':'Cruzamento conectado'}</strong>Fonte: ${isolated?'2':'10'} MW · Carga de 2 MW: alimentada · Carga de 8 MW: ${isolated?'sem alimentação':'alimentada'}`;
+  document.querySelector('#toggle').textContent=isolated?'Remover ponte':'Inserir ponte';
+  const base={key:'demo',itemId:'vertical',from:{x:450,y:70},to:{x:450,y:410},activeMW:2,reactiveMvar:0};
+  animator.update({enabled:true,showReactive:false,segments:[routeCrossingFlow(base,diagram.items.vertical)]});
+}
+document.querySelector('#toggle').onclick=()=>{const result=placeConductorCrossing(diagram.items,{x:450,y:240},{preferredId:'vertical'});diagram.items.vertical=result.item;draw()};
+draw();
+</script></html>
