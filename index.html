@@ -1379,7 +1379,7 @@
       <button id="workModel" type="button" title="Editar o sistema com acesso de administrador">Modelagem</button>
       <button id="workOperation" class="active" type="button" title="Visualizar o sistema ou iniciar treinamento como operador">Operação</button>
       <button id="workStudies" type="button" aria-haspopup="dialog" aria-controls="studiesBox">Estudos</button>
-      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6.2</span>
+      <span class="workbench-caption">UNIFILAR · SIMUSYSTEM v49.6.3</span>
     </nav>
     <div id="diagramReviewNotice" class="diagram-review-note" role="note" hidden>GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.</div>
     <div class="workspace" id="workspace">
@@ -1644,6 +1644,7 @@
       <section class="view-group">
         <h3>Dados do unifilar</h3>
         <div class="data-block-controls">
+          <label><input id="showModelNotice" type="checkbox" />Mostrar aviso do modelo</label>
           <label><input id="showNameplates" type="checkbox" checked />Mostrar dados nominais de fontes e transformadores</label>
           <label>Medições do treinamento<select id="dataBlockResults"><option value="compact">Compactas</option><option value="full">Completas</option><option value="off">Ocultas</option></select></label>
         </div>
@@ -2635,6 +2636,7 @@
       $("#flowShowActive").checked = localStorage.getItem("simuFlowActive") !== "0";
       $("#flowShowReactive").checked = localStorage.getItem("simuFlowReactive") !== "0";
       $("#showNameplates").checked = localStorage.getItem("simuNameplates") !== "0";
+      $("#showModelNotice").checked = localStorage.getItem("simuModelNotice") === "1";
       $("#dataBlockResults").value = ["compact", "full", "off"].includes(localStorage.getItem("simuDataBlocks")) ? localStorage.getItem("simuDataBlocks") : "compact";
       let studyOverlay = null;
       let electricalResults = new Map(),
@@ -5772,7 +5774,7 @@
       function draw(evaluateAlarm = false, skipSupplyAlarms = false) {
         if (engineeringDrag) { engineeringDrawPending = true; return; }
         stage.classList.toggle("reference-layout", !!diagram.reconstruction);
-        $("#diagramReviewNotice").hidden = !diagram.reconstruction;
+        $("#diagramReviewNotice").hidden = !diagram.reconstruction || !$("#showModelNotice").checked;
         $("#diagramReviewNotice").textContent = diagram.reconstruction?.reviewNote || "GERAL ALUNORTE · Reconstruído da foto. Revisar TAGs e dados elétricos pendentes antes dos estudos.";
         stage.innerHTML = "";
         const viewDiagram = diagram,
@@ -7589,6 +7591,10 @@
       };
       $("#powerFlowBox").addEventListener("close", updateWorkbenchNav);
       $("#showNameplates").onchange = () => { localStorage.setItem("simuNameplates", $("#showNameplates").checked ? "1" : "0"); draw(false); };
+      $("#showModelNotice").onchange = () => {
+        localStorage.setItem("simuModelNotice", $("#showModelNotice").checked ? "1" : "0");
+        $("#diagramReviewNotice").hidden = !diagram.reconstruction || !$("#showModelNotice").checked;
+      };
       $("#dataBlockResults").onchange = () => { localStorage.setItem("simuDataBlocks", $("#dataBlockResults").value); draw(false); };
       $("#clearViewStudy").onclick = () => setStudyOverlay(null);
       $("#powerFlowBtn").onclick = () => loadFlowWorkbench.open();
